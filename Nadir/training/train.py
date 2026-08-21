@@ -43,6 +43,7 @@ def main():
     # Check for tensorboard availability
     has_tensorboard = False
     try:
+        from torch.utils.tensorboard import SummaryWriter  # noqa: F401
         import tensorboard  # noqa: F401
         has_tensorboard = True
     except ImportError:
@@ -102,12 +103,15 @@ def main():
 
     print(f"[Nadir Trainer] Starting PPO learning for {args.timesteps:,} steps across {n_envs} environments...")
     try:
-        model.learn(
-            total_timesteps=args.timesteps,
-            callback=[checkpoint_callback],
-            tb_log_name="PPO_Nadir",
-            progress_bar=has_progress_bar,
-        )
+        learn_kwargs = {
+            "total_timesteps": args.timesteps,
+            "callback": [checkpoint_callback],
+            "progress_bar": has_progress_bar,
+        }
+        if has_tensorboard:
+            learn_kwargs["tb_log_name"] = "PPO_Nadir"
+
+        model.learn(**learn_kwargs)
     except KeyboardInterrupt:
         print("\n[Nadir Trainer] Training interrupted by user. Saving current model...")
     finally:
