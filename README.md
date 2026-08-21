@@ -106,24 +106,50 @@ Nadir/
 │   └── measured/               # measured hardware parameters (schema, currently null)
 │       ├── README.md
 │       └── actuators.yaml
+├── upstream/
+│   └── runtime/                # submodule: Open_Duck_Mini_Runtime @ v2 (pinned)
 ├── .gitignore
+├── .gitmodules
+├── CLAUDE.md                   # project ground truth — read before adding structure
 ├── LICENSE
 └── README.md
 ```
 
+Clone with submodules:
+
+```bash
+git clone --recurse-submodules <url>
+# or, in an existing clone:
+git submodule update --init --recursive
+```
+
 ---
+
+## Open decisions
+
+Resolve these before Phase 1 hardware is ordered.
+
+- **IMU: BNO085 or BNO055?** Our spec says BNO085; upstream's runtime is
+  **BNO055-only** (`adafruit_bno055`, with a working calibration script). They
+  are different chips with different drivers — not drop-in. Adopting BNO055
+  inherits the IMU stack for free; keeping BNO085 means budgeting a port.
+- **Upstream's `openai==1.70.0` dependency** is unnecessary for us and unwanted
+  on a 1 GB Pi. Strip it when vendoring or configuring.
 
 ## Next steps
 
-1. Fork [`apirrone/Open_Duck_Playground`](https://github.com/apirrone/Open_Duck_Playground)
+1. ~~Add `Open_Duck_Mini_Runtime` as a pinned submodule~~ — done, see
+   `upstream/runtime`.
+2. Fork [`apirrone/Open_Duck_Playground`](https://github.com/apirrone/Open_Duck_Playground)
    and get its example training running on the INFN cluster **unmodified**,
    with upstream's duck, before changing a line. This is the Phase 0 exit
    criterion and doubles as a check on the SLURM/JAX/GPU setup.
-2. Add [`apirrone/Open_Duck_Mini_Runtime`](https://github.com/apirrone/Open_Duck_Mini_Runtime)
-   as a pinned submodule — this is where the Feetech bus driver and the
-   real-time loop live, and it is the piece least worth reimplementing.
-3. Build the Phase 1 system-ID harness and populate
-   `hardware/measured/actuators.yaml`.
+3. Read `upstream/runtime/mini_bdx_runtime/` — particularly
+   `rustypot_position_hwi.py` and `onnx_infer.py` — before writing anything
+   that talks to a servo.
+4. Build the Phase 1 system-ID harness and populate
+   `hardware/measured/actuators.yaml`. Upstream's `scripts/record_data.py` is
+   a useful starting point.
 
 ## Upstream
 
