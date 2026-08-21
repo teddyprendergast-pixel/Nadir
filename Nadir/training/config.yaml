@@ -1,0 +1,39 @@
+# PPO Training Configuration for Nadir Bipedal Walker
+
+algorithm: "PPO"
+policy: "MlpPolicy"
+
+environment:
+  id: "NadirBipedalWalker-v0"
+  max_episode_steps: 1000
+  frame_skip: 4
+  forward_reward_weight: 1.2
+  ctrl_cost_weight: 0.05
+  healthy_reward: 1.0
+  fall_penalty: 10.0
+  min_torso_height: 0.60
+
+ppo_hyperparameters:
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.005
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+
+network_architecture:
+  net_arch:
+    pi: [256, 256]
+    vf: [256, 256]
+
+training:
+  total_timesteps: 10000000
+  save_freq: 500000
+  eval_freq: 100000
+  eval_episodes: 10
+  log_dir: "./tensorboard_logs"
+  checkpoint_dir: "./checkpoints"

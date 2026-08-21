@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nadir-bipedal-walker"
+version = "0.1.0"
+description = "Autonomous Bipedal Walker Robot Simulation, RL Training, and Embedded Firmware"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Nadir Robotics Project" }
+]
+keywords = [
+    "robotics",
+    "bipedal-walker",
+    "reinforcement-learning",
+    "mujoco",
+    "gymnasium",
+    "stable-baselines3",
+    "esp32",
+    "sim-to-real"
+]
+dependencies = [
+    "mujoco>=3.0.0",
+    "gymnasium>=0.29.0",
+    "stable-baselines3>=2.2.0",
+    "numpy>=1.24.0",
+    "torch>=2.0.0",
+    "pyyaml>=6.0",
+    "tensorboard>=2.14.0",
+    "matplotlib>=3.7.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0"
+]
+export = [
+    "onnx>=1.14.0",
+    "onnxruntime>=1.15.0"
+]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I"]
