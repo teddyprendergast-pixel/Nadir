@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# JAX / XLA
+.jax_cache/
+
+# Training outputs — never commit these
+checkpoints/
+runs/
+logs/
+tensorboard_logs/
+wandb/
+outputs/
+*.onnx
+*.msgpack
+*.pkl
+
+# Hardware logs (raw system-ID captures live in hardware/measured/raw/, gitignored;
+# only the fitted parameters in *.yaml are committed)
+hardware/measured/raw/
+
+# Cluster
+slurm-*.out
+*.sbatch.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Local Claude Code config (machine-specific paths)
+.claude/
