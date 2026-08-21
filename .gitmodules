@@ -1,0 +1,4 @@
+[submodule "upstream/runtime"]
+	path = upstream/runtime
+	url = https://github.com/apirrone/Open_Duck_Mini_Runtime.git
+	branch = v2
