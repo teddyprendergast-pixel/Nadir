@@ -3,7 +3,7 @@ import time
 import sys
 import select
 
-# Sensor pins
+# Sensor pins hi 
 soil_pin = ADC(Pin(5))
 conductivity_pin = ADC(Pin(6))
 soil_pin.atten(ADC.ATTN_11DB)
