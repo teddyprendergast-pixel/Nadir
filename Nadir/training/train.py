@@ -36,8 +36,13 @@ def main():
     parser.add_argument("--log-dir", type=str, default="tensorboard_logs", help="TensorBoard log directory")
     args = parser.parse_args()
 
-    # Determine CPU threads / parallel workers
-    n_envs = args.num_envs if args.num_envs is not None else (os.cpu_count() or 4)
+    # Determine CPU threads / parallel workers based on available CPU cores
+    if args.num_envs is not None:
+        n_envs = args.num_envs
+    elif hasattr(os, "sched_getaffinity"):
+        n_envs = len(os.sched_getaffinity(0))
+    else:
+        n_envs = os.cpu_count() or 4
     print(f"[Nadir Trainer] Initializing {n_envs} parallel simulation workers...")
 
     # Check for tensorboard availability
