@@ -9,31 +9,13 @@ from datetime import datetime
 from .config import PPOConfig, EnvConfig
 from .networks import create_actor_critic
 from .ppo import PPOTrainer, RunnerState
-
-# Dummy Env definition to allow standalone execution. In reality, replace with nadir.sim.env_mjx.
-class DummyEnv:
-    def __init__(self, config: EnvConfig):
-        self.config = config
-    
-    def reset(self, rng):
-        state = jnp.zeros((self.config.num_envs,))
-        obs = jnp.zeros((self.config.num_envs, self.config.obs_dim))
-        priv_obs = jnp.zeros((self.config.num_envs, self.config.privileged_obs_dim))
-        return state, obs, priv_obs
-        
-    def step(self, rng, state, action):
-        next_state = state + 1
-        next_obs = jnp.zeros((self.config.num_envs, self.config.obs_dim))
-        next_priv_obs = jnp.zeros((self.config.num_envs, self.config.privileged_obs_dim))
-        reward = jnp.ones((self.config.num_envs,))
-        done = next_state >= self.config.episode_length
-        next_state = jnp.where(done, jnp.zeros_like(next_state), next_state)
-        return next_state, next_obs, next_priv_obs, reward, done
+from nadir.sim.env_mjx import NadirEnv
 
 def main():
     parser = argparse.ArgumentParser(description="Train Nadir bipedal robot policy")
     parser.add_argument("--num-envs", type=int, default=4096, help="Number of parallel environments")
     parser.add_argument("--num-steps", type=int, default=24, help="Number of steps per rollout")
+    parser.add_argument("--total-timesteps", type=int, default=100_000_000, help="Total training timesteps")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Directory to save checkpoints")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
@@ -43,6 +25,7 @@ def main():
     ppo_config = PPOConfig(
         num_envs=args.num_envs,
         num_steps=args.num_steps,
+        total_timesteps=args.total_timesteps,
         seed=args.seed,
         checkpoint_dir=args.checkpoint_dir
     )
@@ -52,10 +35,9 @@ def main():
     rng = jax.random.PRNGKey(ppo_config.seed)
     rng, rng_init, rng_env = jax.random.split(rng, 3)
     
-    # Initialize Environment (DummyEnv used as placeholder, should import real env)
-    # from nadir.sim.env_mjx import NadirMJXEnv
-    env = DummyEnv(env_config)
-    env_state, obs, priv_obs = env.reset(rng_env)
+    # Initialize real MJX Environment
+    env = NadirEnv(num_envs=args.num_envs)
+    env_state, obs, priv_obs = env.reset(jax.random.split(rng_env, args.num_envs))
     
     # Initialize Network
     actor_critic = create_actor_critic(ppo_config)

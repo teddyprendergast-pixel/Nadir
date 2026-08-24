@@ -7,14 +7,15 @@ import mujoco
 from mujoco import mjx
 from .rewards import RewardConfig, total_reward, velocity_tracking_reward, upright_reward, action_rate_penalty
 
-@dataclass(frozen=True)
+import flax.struct
+
+@flax.struct.dataclass
 class EnvState:
     mjx_data: mjx.Data
     obs: jnp.ndarray
     privileged_obs: jnp.ndarray
     reward: jnp.ndarray
     done: jnp.ndarray
-    info: Dict[str, jnp.ndarray]
     step_count: jnp.ndarray
     command: jnp.ndarray
     previous_action: jnp.ndarray
@@ -46,10 +47,10 @@ class NadirEnv:
         
         self.reward_config = RewardConfig()
 
-    @jax.jit
-    def reset(self, rng: jnp.ndarray) -> EnvState:
-        def _reset_single(rng):
-            rng, rng_noise = jax.random.split(rng)
+    def reset(self, rng: jnp.ndarray) -> Tuple[EnvState, jnp.ndarray, jnp.ndarray]:
+        """Reset all environments vectorized across batch of RNGs."""
+        def _reset_single(rng_key):
+            rng_key, rng_noise = jax.random.split(rng_key)
             mjx_data = mjx.make_data(self.mjx_model)
             
             # Reset positions and velocities with slight noise
@@ -62,60 +63,57 @@ class NadirEnv:
             mjx_data = mjx_data.replace(qpos=qpos, qvel=qvel)
             mjx_data = mjx.step(self.mjx_model, mjx_data)
             
-            command = jnp.array([0.5, 0.0, 0.0]) # Example command: vx, vy, yaw_rate
+            command = jnp.array([0.5, 0.0, 0.0]) # Target: vx=0.5 m/s, vy=0.0, yaw=0.0
             prev_action = jnp.zeros(10)
             gait_phase = jnp.zeros(1)
             
             obs = self._get_obs(mjx_data, command, prev_action, gait_phase)
-            priv_obs = self._get_privileged_obs(mjx_data)
+            priv_obs = self._get_privileged_obs(mjx_data, obs)
             
-            return EnvState(
+            state = EnvState(
                 mjx_data=mjx_data,
                 obs=obs,
                 privileged_obs=priv_obs,
                 reward=jnp.array(0.0),
                 done=jnp.array(False),
-                info={},
                 step_count=jnp.array(0),
                 command=command,
                 previous_action=prev_action,
                 gait_phase=gait_phase,
-                rng=rng
+                rng=rng_key
             )
+            return state, obs, priv_obs
             
         return jax.vmap(_reset_single)(rng)
 
-    @jax.jit
-    def step(self, state: EnvState, action: jnp.ndarray) -> EnvState:
-        def _step_single(state, action):
-            action = jnp.clip(action, -1.0, 1.0)
-            target_pos = self.default_positions + action * self.action_scale
-            
-            # Control limit enforcement is handled by the mjcf, but we set the control array directly
+    def step(self, rng: jnp.ndarray, state: EnvState, action: jnp.ndarray) -> Tuple[EnvState, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """Vectorized step across parallel environments."""
+        def _step_single(rng_key, s, act):
+            act = jnp.clip(act, -1.0, 1.0)
+            target_pos = self.default_positions + act * self.action_scale
             ctrl = target_pos
             
             def body_fn(i, data):
                 data = data.replace(ctrl=ctrl)
                 return mjx.step(self.mjx_model, data)
                 
-            new_data = jax.lax.fori_loop(0, self.decimation, body_fn, state.mjx_data)
+            new_data = jax.lax.fori_loop(0, self.decimation, body_fn, s.mjx_data)
             
             # Update gait phase (50Hz increments)
-            new_gait_phase = (state.gait_phase + 0.02) % 1.0
+            new_gait_phase = (s.gait_phase + 0.02) % 1.0
             
             # Recompute observations
-            obs = self._get_obs(new_data, state.command, action, new_gait_phase)
-            priv_obs = self._get_privileged_obs(new_data)
+            obs = self._get_obs(new_data, s.command, act, new_gait_phase)
+            priv_obs = self._get_privileged_obs(new_data, obs)
             
             # Compute rewards
             base_lin_vel = new_data.qvel[:3]
-            base_ang_vel = new_data.qvel[3:6]
             projected_gravity = obs[:3]
             
             components = [
-                velocity_tracking_reward(base_lin_vel, state.command),
+                velocity_tracking_reward(base_lin_vel, s.command),
                 upright_reward(projected_gravity),
-                action_rate_penalty(action, state.previous_action)
+                action_rate_penalty(act, s.previous_action)
             ]
             weights = [self.reward_config.tracking_lin_vel, self.reward_config.upright, self.reward_config.action_rate]
             
@@ -124,24 +122,21 @@ class NadirEnv:
             # Determine done condition
             done = jnp.where(projected_gravity[2] < 0.0, True, False) # Torso tipped over
             
-            # Randomize command periodically (simplified)
-            rng, cmd_rng = jax.random.split(state.rng)
-            
-            return EnvState(
+            new_state = EnvState(
                 mjx_data=new_data,
                 obs=obs,
                 privileged_obs=priv_obs,
                 reward=reward,
                 done=done,
-                info={},
-                step_count=state.step_count + 1,
-                command=state.command,
-                previous_action=action,
+                step_count=s.step_count + 1,
+                command=s.command,
+                previous_action=act,
                 gait_phase=new_gait_phase,
-                rng=rng
+                rng=rng_key
             )
+            return new_state, obs, priv_obs, reward, done
 
-        return jax.vmap(_step_single)(state, action)
+        return jax.vmap(_step_single)(rng, state, action)
 
     def _quat_rotate_inv(self, quat: jnp.ndarray, vec: jnp.ndarray) -> jnp.ndarray:
         """Rotate a vector by the inverse of a quaternion (wxyz format)."""
@@ -173,15 +168,17 @@ class NadirEnv:
             gait_obs
         ])
 
-    def _get_privileged_obs(self, data: mjx.Data) -> jnp.ndarray:
+    def _get_privileged_obs(self, data: mjx.Data, standard_obs: jnp.ndarray) -> jnp.ndarray:
+        """Privileged observation for the critic (98 dims = 41 standard + 57 privileged)."""
         true_base_vel = data.qvel[:3]
-        terrain_heights = jnp.zeros(50) # Placeholder for terrain height sample
+        terrain_heights = jnp.zeros(50)
         ground_friction = jnp.array([1.0])
         ext_force = jnp.zeros(3)
         
-        return jnp.concatenate([
+        priv_extra = jnp.concatenate([
             true_base_vel,
             terrain_heights,
             ground_friction,
             ext_force
         ])
+        return jnp.concatenate([standard_obs, priv_extra])

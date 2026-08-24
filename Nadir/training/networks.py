@@ -59,6 +59,9 @@ class ActorCritic(nn.Module):
         value = self.critic(privileged_obs)
         return mean, log_std, value
     
+    def get_value(self, privileged_obs: jnp.ndarray) -> jnp.ndarray:
+        return self.critic(privileged_obs)
+    
     def get_action(self, obs: jnp.ndarray, rng: jax.Array) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         mean, log_std = self.actor(obs)
         std = jnp.exp(log_std)

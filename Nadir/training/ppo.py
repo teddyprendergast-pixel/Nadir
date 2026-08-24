@@ -172,7 +172,7 @@ class PPOTrainer:
             
             # Get value
             value = self.actor_critic.apply(
-                runner_state.params, obs, priv_obs, method=self.actor_critic.critic
+                runner_state.params, priv_obs, method=self.actor_critic.get_value
             )
             
             # Get log prob
@@ -181,8 +181,9 @@ class PPOTrainer:
             log_prob = jnp.sum(log_prob, axis=-1)
             
             # Step env
-            rng, rng_env = jax.random.split(rng)
-            next_env_state, next_obs, next_priv_obs, reward, done = self.env.step(rng_env, env_state, action)
+            rng, rng_step = jax.random.split(rng)
+            rng_envs = jax.random.split(rng_step, self.config.num_envs)
+            next_env_state, next_obs, next_priv_obs, reward, done = self.env.step(rng_envs, env_state, action)
             
             transition = Transition(
                 obs=obs,
@@ -206,7 +207,7 @@ class PPOTrainer:
         
         # Compute last value
         last_value = self.actor_critic.apply(
-            runner_state.params, next_obs, next_priv_obs, method=self.actor_critic.critic
+            runner_state.params, next_priv_obs, method=self.actor_critic.get_value
         )
         
         # Compute GAE
