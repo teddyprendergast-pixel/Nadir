@@ -1,10 +1,15 @@
-from sim.env import NadirBipedalWalkerEnv
-import gymnasium as gym
+"""Simulation module for Nadir using MuJoCo MJX."""
 
-gym.register(
-    id="NadirBipedalWalker-v0",
-    entry_point="sim.env:NadirBipedalWalkerEnv",
-    max_episode_steps=1000,
-)
+from .env_mjx import NadirEnv, EnvState
+from .rewards import RewardConfig
+from .terrains import TerrainCurriculum
+from .domain_rand import DomainRandParams, randomize_domain
 
-__all__ = ["NadirBipedalWalkerEnv"]
+__all__ = [
+    "NadirEnv",
+    "EnvState",
+    "RewardConfig",
+    "TerrainCurriculum",
+    "DomainRandParams",
+    "randomize_domain",
+]

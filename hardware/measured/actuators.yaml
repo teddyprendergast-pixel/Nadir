@@ -1,0 +1,74 @@
+# Measured actuator parameters — Nadir
+#
+# This file is the single source of truth for real, measured hardware behaviour.
+# It is consumed by the MJCF generator and by the domain-randomisation config.
+#
+# RULE: nothing here is a guess. A field is either measured on the bench and
+# recorded with its date, or it is null. Datasheet values are kept in a clearly
+# separate block so they can never be mistaken for measurements.
+#
+# Populated by the Phase 1 system-ID harness. Raw captures go to
+# hardware/measured/raw/ (gitignored); only fitted values are committed.
+
+schema_version: 1
+status: unmeasured # unmeasured | partial | measured
+measured_by: null
+measured_on: null # ISO date, e.g. 2026-09-14
+
+bus:
+  protocol: feetech_sts # STS3215 = half-duplex TTL serial, daisy-chained
+  baud: null # as configured, e.g. 1000000
+  servo_count: null
+  # Measured on the Pi, not calculated from baud rate. These feed the
+  # latency model in training — see the actuator_model.fitted.response_lag_ms
+  # note below about not double-counting.
+  read_all_latency_ms: null # full-chain position+velocity read
+  write_all_latency_ms: null # full-chain goal-position write
+  jitter_p99_ms: null # 99th percentile over a sustained 50 Hz run
+
+# The STS3215 closes its own position loop internally. We do not command
+# torque. Everything below describes that internal loop's behaviour so the
+# MuJoCo <position> actuator can be made to match it.
+actuator_model:
+  part: STS3215
+
+  # DATASHEET ONLY — starting points for sanity checks. Never use these in
+  # the MJCF. They exist so a fitted value that is wildly off is obvious.
+  datasheet:
+    stall_torque_nm: 2.94 # 30 kg·cm @ 7.4 V
+    no_load_speed_rad_s: null
+    encoder_bits: 12
+    voltage_nominal_v: 7.4
+
+  # FITTED FROM MEASUREMENT — these are what the MJCF actually uses.
+  fitted:
+    kp: null # MuJoCo <position kp="...">
+    kd: null # MuJoCo <position kv="...">
+    armature: null # reflected rotor inertia, kg·m²
+    damping: null # N·m·s/rad
+    frictionloss: null # N·m, Coulomb friction
+    torque_limit_nm: null # measured, will be below datasheet stall
+    backlash_deg: null # ~0.87 nominal for STS3215 — measure per unit
+    # Mechanical/electrical lag INSIDE the servo, from goal-position write
+    # to shaft motion onset. Do not include bus latency here; the two are
+    # modelled separately and summing them by accident inflates the delay.
+    response_lag_ms: null
+
+  # Per-unit spread across the servos actually bought. This is what sets the
+  # domain-randomisation ranges — DR should cover observed variation, not a
+  # number picked by intuition.
+  unit_variation:
+    kp_range: [null, null]
+    backlash_deg_range: [null, null]
+    torque_limit_nm_range: [null, null]
+
+# One entry per joint once the leg exists. Template:
+#
+#   - name: left_hip_yaw
+#     servo_id: 11
+#     sign: +1              # +1 or -1, maps servo direction to MJCF axis
+#     zero_offset_deg: null # servo raw position at MJCF zero pose
+#     range_deg: [null, null]
+#     overrides: {}         # per-joint fitted values that differ from the
+#                           # shared actuator_model above (e.g. a gearbox)
+joints: []

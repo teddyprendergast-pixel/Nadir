@@ -1,102 +1,118 @@
-"""
-Multi-core Vectorized PPO Training Script for Nadir Bipedal Walker
-"""
-
-import argparse
 import os
-import sys
+import argparse
+import jax
+import jax.numpy as jnp
+import optax
+import orbax.checkpoint as ocp
+from datetime import datetime
 
-# Ensure repository root is on Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from .config import PPOConfig, EnvConfig
+from .networks import create_actor_critic
+from .ppo import PPOTrainer, RunnerState
 
-import gymnasium as gym
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
-from sim.env import NadirBipedalWalkerEnv
-
-
-def make_env(rank: int, seed: int = 0):
-    """
-    Utility function for multiprocessed env.
-    """
-    def _init():
-        env = NadirBipedalWalkerEnv()
-        env.reset(seed=seed + rank)
-        return env
-    return _init
-
+# Dummy Env definition to allow standalone execution. In reality, replace with nadir.sim.env_mjx.
+class DummyEnv:
+    def __init__(self, config: EnvConfig):
+        self.config = config
+    
+    def reset(self, rng):
+        state = jnp.zeros((self.config.num_envs,))
+        obs = jnp.zeros((self.config.num_envs, self.config.obs_dim))
+        priv_obs = jnp.zeros((self.config.num_envs, self.config.privileged_obs_dim))
+        return state, obs, priv_obs
+        
+    def step(self, rng, state, action):
+        next_state = state + 1
+        next_obs = jnp.zeros((self.config.num_envs, self.config.obs_dim))
+        next_priv_obs = jnp.zeros((self.config.num_envs, self.config.privileged_obs_dim))
+        reward = jnp.ones((self.config.num_envs,))
+        done = next_state >= self.config.episode_length
+        next_state = jnp.where(done, jnp.zeros_like(next_state), next_state)
+        return next_state, next_obs, next_priv_obs, reward, done
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Nadir Bipedal Walker with PPO")
-    parser.add_argument("--timesteps", type=int, default=10_000_000, help="Total training timesteps")
-    parser.add_argument("--num-envs", type=int, default=None, help="Number of parallel environments (default: cpu count)")
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument("--save-dir", type=str, default="checkpoints", help="Directory to save model checkpoints")
-    parser.add_argument("--log-dir", type=str, default="tensorboard_logs", help="TensorBoard log directory")
+    parser = argparse.ArgumentParser(description="Train Nadir bipedal robot policy")
+    parser.add_argument("--num-envs", type=int, default=4096, help="Number of parallel environments")
+    parser.add_argument("--num-steps", type=int, default=24, help="Number of steps per rollout")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Directory to save checkpoints")
+    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
-
-    # Determine CPU threads / parallel workers
-    n_envs = args.num_envs if args.num_envs is not None else (os.cpu_count() or 4)
-    print(f"[Nadir Trainer] Initializing {n_envs} parallel simulation workers...")
-
-    # Create directories
-    os.makedirs(args.save_dir, exist_ok=True)
-    os.makedirs(args.log_dir, exist_ok=True)
-
-    # Initialize vectorized environment
-    env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
-    env = VecMonitor(env)
-
-    # Setup callbacks
-    checkpoint_callback = CheckpointCallback(
-        save_freq=max(100_000 // n_envs, 1),
-        save_path=args.save_dir,
-        name_prefix="nadir_ppo",
-        save_replay_buffer=False,
-        save_vecnormalize=True,
+    
+    # Setup configs
+    ppo_config = PPOConfig(
+        num_envs=args.num_envs,
+        num_steps=args.num_steps,
+        seed=args.seed,
+        checkpoint_dir=args.checkpoint_dir
     )
-
-    # Policy architecture
-    policy_kwargs = dict(
-        net_arch=dict(pi=[256, 256], vf=[256, 256])
+    env_config = EnvConfig(num_envs=args.num_envs)
+    
+    # Initialize random keys
+    rng = jax.random.PRNGKey(ppo_config.seed)
+    rng, rng_init, rng_env = jax.random.split(rng, 3)
+    
+    # Initialize Environment (DummyEnv used as placeholder, should import real env)
+    # from nadir.sim.env_mjx import NadirMJXEnv
+    env = DummyEnv(env_config)
+    env_state, obs, priv_obs = env.reset(rng_env)
+    
+    # Initialize Network
+    actor_critic = create_actor_critic(ppo_config)
+    dummy_obs = jnp.zeros((env_config.num_envs, env_config.obs_dim))
+    dummy_priv_obs = jnp.zeros((env_config.num_envs, env_config.privileged_obs_dim))
+    
+    params = actor_critic.init(rng_init, dummy_obs, dummy_priv_obs)
+    
+    # Initialize Trainer
+    trainer = PPOTrainer(ppo_config, env, actor_critic)
+    opt_state = trainer.optimizer.init(params)
+    
+    runner_state = RunnerState(
+        params=params,
+        opt_state=opt_state,
+        env_state=env_state,
+        obs=obs,
+        privileged_obs=priv_obs,
+        rng=rng
     )
-
-    # Instantiate PPO model
-    model = PPO(
-        policy="MlpPolicy",
-        env=env,
-        learning_rate=args.lr,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        ent_coef=0.005,
-        vf_coef=0.5,
-        max_grad_norm=0.5,
-        policy_kwargs=policy_kwargs,
-        tensorboard_log=args.log_dir,
-        verbose=1,
-    )
-
-    print(f"[Nadir Trainer] Starting PPO learning for {args.timesteps:,} steps across {n_envs} environments...")
-    try:
-        model.learn(
-            total_timesteps=args.timesteps,
-            callback=[checkpoint_callback],
-            tb_log_name="PPO_Nadir",
-            progress_bar=True,
+    
+    # Setup Checkpointer
+    ckpt_dir = os.path.join(ppo_config.checkpoint_dir, datetime.now().strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(ckpt_dir, exist_ok=True)
+    checkpointer = ocp.StandardCheckpointer()
+    
+    if args.resume:
+        print(f"Resuming from {args.resume}")
+        ckpt_state = checkpointer.restore(args.resume)
+        runner_state = runner_state._replace(
+            params=ckpt_state['params'],
+            opt_state=ckpt_state['opt_state']
         )
-    except KeyboardInterrupt:
-        print("\n[Nadir Trainer] Training interrupted by user. Saving current model...")
-    finally:
-        final_path = os.path.join(args.save_dir, "nadir_ppo_final")
-        model.save(final_path)
-        print(f"[Nadir Trainer] Final model saved successfully to: {final_path}.zip")
-        env.close()
-
+    
+    # Calculate updates
+    num_updates = ppo_config.total_timesteps // (ppo_config.num_steps * ppo_config.num_envs)
+    
+    print(f"Starting training for {num_updates} updates...")
+    
+    # Wrap train step with lax.scan across total updates (could batch this if needed)
+    for update in range(1, num_updates + 1):
+        runner_state, metrics = trainer.train_step(runner_state, None)
+        
+        if update % ppo_config.log_interval == 0:
+            print(f"Update: {update}/{num_updates}")
+            print(f"Reward Sum: {metrics['reward_sum']:.2f}")
+            print(f"Policy Loss: {metrics['policy_loss']:.4f}")
+            print(f"Value Loss: {metrics['value_loss']:.4f}")
+            print("-" * 30)
+            
+        if update % ppo_config.save_interval == 0:
+            ckpt_path = os.path.join(ckpt_dir, f"update_{update}")
+            checkpointer.save(os.path.abspath(ckpt_path), {
+                'params': runner_state.params,
+                'opt_state': runner_state.opt_state
+            })
+            print(f"Saved checkpoint to {ckpt_path}")
 
 if __name__ == "__main__":
     main()
