@@ -6,6 +6,15 @@ import optax
 import orbax.checkpoint as ocp
 from datetime import datetime
 
+try:
+    from tqdm import tqdm
+    def tprint(*args, **kwargs):
+        tqdm.write(" ".join(map(str, args)), **kwargs)
+except ImportError:
+    def tqdm(iterable, **kwargs):
+        return iterable
+    tprint = print
+
 from .config import PPOConfig, EnvConfig
 from .networks import create_actor_critic
 from .ppo import PPOTrainer, RunnerState
@@ -78,15 +87,15 @@ def main():
     print(f"Starting training for {num_updates} updates...")
     
     # Wrap train step with lax.scan across total updates (could batch this if needed)
-    for update in range(1, num_updates + 1):
+    for update in tqdm(range(1, num_updates + 1), desc="Training", unit="update"):
         runner_state, metrics = trainer.train_step(runner_state, None)
         
         if update % ppo_config.log_interval == 0:
-            print(f"Update: {update}/{num_updates}")
-            print(f"Reward Sum: {metrics['reward_sum']:.2f}")
-            print(f"Policy Loss: {metrics['policy_loss']:.4f}")
-            print(f"Value Loss: {metrics['value_loss']:.4f}")
-            print("-" * 30)
+            tprint(f"Update: {update}/{num_updates}")
+            tprint(f"Reward Sum: {metrics['reward_sum']:.2f}")
+            tprint(f"Policy Loss: {metrics['policy_loss']:.4f}")
+            tprint(f"Value Loss: {metrics['value_loss']:.4f}")
+            tprint("-" * 30)
             
         if update % ppo_config.save_interval == 0:
             ckpt_path = os.path.join(ckpt_dir, f"update_{update}")
@@ -94,7 +103,7 @@ def main():
                 'params': runner_state.params,
                 'opt_state': runner_state.opt_state
             })
-            print(f"Saved checkpoint to {ckpt_path}")
+            tprint(f"Saved checkpoint to {ckpt_path}")
 
 if __name__ == "__main__":
     main()
