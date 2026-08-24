@@ -6,8 +6,7 @@ def test_mjcf_loads():
     import mujoco
     import os
     
-    # Use a dummy XML if nadir.xml doesn't exist yet for test to pass structurally
-    xml_path = 'nadir/sim/nadir.xml'
+    xml_path = 'Nadir/sim/nadir.xml'
     if not os.path.exists(xml_path):
         pytest.skip(f"{xml_path} not found")
         
@@ -17,34 +16,36 @@ def test_mjcf_loads():
 
 def test_env_reset():
     """Verify reset returns valid observation shape."""
-    # Placeholder structure, requires actual Env class
     try:
-        from nadir.sim.env import NadirEnv
-        env = NadirEnv()
-        obs = env.reset()
-        assert obs.shape == (41,)
+        from Nadir.sim.env_mjx import NadirEnv
+        import jax
+        env = NadirEnv(num_envs=1)
+        rngs = jax.random.split(jax.random.PRNGKey(0), env.num_envs)
+        state = env.reset(rngs)
+        assert state.obs.shape == (1, 41)
     except ImportError:
-        pytest.skip("NadirEnv not implemented yet")
+        pytest.skip("NadirEnv import failed")
 
 def test_env_step_zero_action():
     """Verify stepping with zero action doesn't crash."""
     try:
-        from nadir.sim.env import NadirEnv
-        env = NadirEnv()
-        env.reset()
-        obs, reward, done, info = env.step(np.zeros(10))
-        assert obs.shape == (41,)
-        assert isinstance(reward, float)
-        assert isinstance(done, bool)
+        from Nadir.sim.env_mjx import NadirEnv
+        import jax
+        import jax.numpy as jnp
+        env = NadirEnv(num_envs=1)
+        rngs = jax.random.split(jax.random.PRNGKey(0), env.num_envs)
+        state = env.reset(rngs)
+        next_state = env.step(state, jnp.zeros((1, 10)))
+        assert next_state.obs.shape == (1, 41)
     except ImportError:
-        pytest.skip("NadirEnv not implemented yet")
+        pytest.skip("NadirEnv import failed")
 
 def test_position_actuators():
     """Verify actuators are position-controlled, not torque."""
     import mujoco
     import os
     
-    xml_path = 'nadir/sim/nadir.xml'
+    xml_path = 'Nadir/sim/nadir.xml'
     if not os.path.exists(xml_path):
         pytest.skip(f"{xml_path} not found")
         

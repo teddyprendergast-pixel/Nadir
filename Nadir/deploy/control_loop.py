@@ -6,9 +6,9 @@ import numpy as np
 import argparse
 from typing import Optional
 
-from nadir.deploy.servo_bus import STS3215Bus
-from nadir.deploy.imu import IMUReader, BNO085Reader, BNO055Reader
-from nadir.deploy.onnx_infer import PolicyInference
+from Nadir.deploy.servo_bus import STS3215Bus
+from Nadir.deploy.imu import IMUReader, BNO085Reader, BNO055Reader
+from Nadir.deploy.onnx_infer import PolicyInference
 
 class ControlLoop:
     """Main 50 Hz control loop for the Nadir biped.

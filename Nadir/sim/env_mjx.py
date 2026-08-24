@@ -1,13 +1,14 @@
 import os
+from functools import partial
 from typing import Tuple, Dict, Any
-from dataclasses import dataclass
+from flax import struct
 import jax
 import jax.numpy as jnp
 import mujoco
 from mujoco import mjx
 from .rewards import RewardConfig, total_reward, velocity_tracking_reward, upright_reward, action_rate_penalty
 
-@dataclass(frozen=True)
+@struct.dataclass
 class EnvState:
     mjx_data: mjx.Data
     obs: jnp.ndarray
@@ -46,7 +47,7 @@ class NadirEnv:
         
         self.reward_config = RewardConfig()
 
-    @jax.jit
+    @partial(jax.jit, static_argnums=(0,))
     def reset(self, rng: jnp.ndarray) -> EnvState:
         def _reset_single(rng):
             rng, rng_noise = jax.random.split(rng)
@@ -85,7 +86,7 @@ class NadirEnv:
             
         return jax.vmap(_reset_single)(rng)
 
-    @jax.jit
+    @partial(jax.jit, static_argnums=(0,))
     def step(self, state: EnvState, action: jnp.ndarray) -> EnvState:
         def _step_single(state, action):
             action = jnp.clip(action, -1.0, 1.0)

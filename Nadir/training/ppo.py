@@ -172,7 +172,7 @@ class PPOTrainer:
             
             # Get value
             value = self.actor_critic.apply(
-                runner_state.params, obs, priv_obs, method=self.actor_critic.critic
+                runner_state.params, priv_obs, method=self.actor_critic.get_value
             )
             
             # Get log prob
@@ -206,7 +206,7 @@ class PPOTrainer:
         
         # Compute last value
         last_value = self.actor_critic.apply(
-            runner_state.params, next_obs, next_priv_obs, method=self.actor_critic.critic
+            runner_state.params, next_priv_obs, method=self.actor_critic.get_value
         )
         
         # Compute GAE

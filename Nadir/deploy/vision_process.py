@@ -1,4 +1,5 @@
 import multiprocessing
+import multiprocessing.connection
 import time
 import struct
 import numpy as np
@@ -20,8 +21,8 @@ class VisionProcess:
         """Main vision loop."""
         try:
             # We delay imports so they don't impact the main control process
-            from nadir.vision.depth_provider import OakDLiteProvider
-            from nadir.navigation.navigator import Navigator
+            from Nadir.vision.depth_provider import OakDLiteProvider
+            from Nadir.navigation.navigator import Navigator
         except ImportError:
             print("Vision modules not found. Exiting vision process.")
             return
