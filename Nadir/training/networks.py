@@ -6,7 +6,7 @@ from typing import Sequence, Callable, Tuple
 class ActorNetwork(nn.Module):
     """Gaussian policy network for PPO."""
     hidden_dims: Sequence[int] = (256, 256, 128)
-    action_dim: int = 10
+    action_dim: int = 12
     activation: Callable = nn.elu
     init_noise_std: float = 1.0
     
@@ -85,7 +85,7 @@ def create_actor_critic(config) -> ActorCritic:
     return ActorCritic(
         actor_hidden_dims=config.actor_hidden_dims,
         critic_hidden_dims=config.critic_hidden_dims,
-        action_dim=10,
+        action_dim=12,
         activation_str=config.activation,
         init_noise_std=config.init_noise_std
     )

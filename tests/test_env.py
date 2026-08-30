@@ -23,9 +23,9 @@ def model():
 
 
 def test_mjcf_loads_with_expected_dimensions(model):
-    assert model.nu == 10                    # 10 actuated joints
-    assert model.nq == 17                    # free joint (7) + 10 hinges
-    assert model.nv == 16                    # free joint (6) + 10 hinges
+    assert model.nu == 12                    # 6 actuated joints per leg
+    assert model.nq == 19                    # free joint (7) + 12 hinges
+    assert model.nv == 18                    # free joint (6) + 12 hinges
 
 
 def test_all_actuators_are_position_controlled(model):
@@ -53,6 +53,38 @@ def test_ctrlrange_covers_the_full_joint_range(model):
         name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
         assert lo_c <= lo_j + 1e-9 and hi_c >= hi_j - 1e-9, (
             f"{name}: ctrlrange [{lo_c}, {hi_c}] clips joint range [{lo_j}, {hi_j}]"
+        )
+
+
+def test_model_has_hip_yaw_on_both_legs(model):
+    """Regression guard for the finding in docs/audit-2026-08-30.md §3b.
+
+    A 10-DOF version of this model had no yaw actuator at all, so it could
+    only generate torque about z by scuffing its feet. It tracked 0.237 rad/s
+    against a 0.80 rad/s turn command and drifted in yaw on every command.
+    That is unfixable by training — it needs the joint.
+    """
+    names = {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+             for i in range(model.njnt)}
+    assert "hip_yaw_r" in names and "hip_yaw_l" in names
+
+    for side in ("r", "l"):
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"hip_yaw_{side}")
+        axis = model.jnt_axis[jid]
+        assert abs(axis[2]) > 0.99, f"hip_yaw_{side} must rotate about z, got {axis}"
+
+
+def test_pose_vectors_match_the_model(model):
+    """DEFAULT_POSE and ACTION_SCALE are indexed by MJCF joint order."""
+    from Nadir.sim.env_mjx import NadirEnv
+
+    assert len(NadirEnv.DEFAULT_POSE) == model.nu
+    assert len(NadirEnv.ACTION_SCALE) == model.nu
+    # every default must sit inside its joint's range
+    for i, target in enumerate(NadirEnv.DEFAULT_POSE):
+        lo, hi = model.jnt_range[i + 1]      # +1 skips the free joint
+        assert lo <= target <= hi, (
+            f"default {target} outside range [{lo}, {hi}] for joint {i}"
         )
 
 
@@ -106,12 +138,12 @@ def test_actor_observation_excludes_base_linear_velocity(env):
     import jax.numpy as jnp
     from types import SimpleNamespace
 
-    cmd, prev, phase = jnp.zeros(3), jnp.zeros(10), jnp.zeros(1)
+    cmd, prev, phase = jnp.zeros(3), jnp.zeros(12), jnp.zeros(1)
     qpos = jnp.array(np.concatenate([[0, 0, 0.26], [1, 0, 0, 0], env.DEFAULT_POSE]))
 
-    base = env._get_obs(SimpleNamespace(qpos=qpos, qvel=jnp.zeros(16)), cmd, prev, phase)
+    base = env._get_obs(SimpleNamespace(qpos=qpos, qvel=jnp.zeros(18)), cmd, prev, phase)
     moving = env._get_obs(
-        SimpleNamespace(qpos=qpos, qvel=jnp.zeros(16).at[0:3].set(jnp.array([1.0, 0.5, 0.2]))),
+        SimpleNamespace(qpos=qpos, qvel=jnp.zeros(18).at[0:3].set(jnp.array([1.0, 0.5, 0.2]))),
         cmd, prev, phase,
     )
     assert np.allclose(np.asarray(base), np.asarray(moving)), (
@@ -145,7 +177,7 @@ def test_step_runs_and_environments_auto_reset_on_termination(env):
     state = state.replace(mjx_data=state.mjx_data.replace(qpos=flipped))
 
     (state, obs, priv, reward, done, terminated,
-     ep_return, ep_length) = env.step(state, jnp.zeros((2, 10)))
+     ep_return, ep_length) = env.step(state, jnp.zeros((2, 12)))
 
     assert bool(np.all(np.asarray(terminated))), "inverted torso must terminate"
     assert bool(np.all(np.asarray(done)))
@@ -172,7 +204,7 @@ def test_episode_statistics_reset_with_the_episode(env):
     state, _, _ = env.reset(jax.random.split(jax.random.PRNGKey(3), 2))
 
     # One ordinary step: the accumulators advance.
-    state, _, _, reward, done, _, ep_ret, ep_len = env.step(state, jnp.zeros((2, 10)))
+    state, _, _, reward, done, _, ep_ret, ep_len = env.step(state, jnp.zeros((2, 12)))
     assert not bool(np.any(np.asarray(done)))
     assert np.allclose(np.asarray(state.episode_return), np.asarray(reward))
     assert bool(np.all(np.asarray(state.step_count) == 1))
@@ -181,7 +213,7 @@ def test_episode_statistics_reset_with_the_episode(env):
     # episode, while the state that comes back has already reset to zero.
     flipped = state.mjx_data.qpos.at[:, 3:7].set(jnp.array([0.0, 1.0, 0.0, 0.0]))
     state = state.replace(mjx_data=state.mjx_data.replace(qpos=flipped))
-    state, _, _, _, done, _, ep_ret, ep_len = env.step(state, jnp.zeros((2, 10)))
+    state, _, _, _, done, _, ep_ret, ep_len = env.step(state, jnp.zeros((2, 12)))
 
     assert bool(np.all(np.asarray(done)))
     assert bool(np.all(np.asarray(ep_len) == 2)), np.asarray(ep_len)

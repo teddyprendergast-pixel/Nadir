@@ -47,12 +47,20 @@ class EnvState:
 
 
 class NadirEnv:
-    # Nominal standing pose, radians, in MJCF joint order.
-    DEFAULT_POSE = (0.0, 0.0, 0.5, -0.3, 0.0, 0.0, 0.0, 0.5, -0.3, 0.0)
+    # Nominal standing pose, radians, in MJCF joint order. Per leg the order
+    # is (hip_yaw, hip_pitch, hip_roll, knee, ankle_pitch, ankle_roll); right
+    # leg first, then left. This MUST match the MJCF, and the tests check it.
+    DEFAULT_POSE = (
+        0.0, 0.0, 0.0, 0.5, -0.3, 0.0,   # right
+        0.0, 0.0, 0.0, 0.5, -0.3, 0.0,   # left
+    )
 
     # Per-joint action scale: the policy outputs a in [-1, 1] and the goal
     # position is DEFAULT_POSE + a * ACTION_SCALE.
-    ACTION_SCALE = (0.4, 0.2, 0.6, 0.4, 0.2, 0.4, 0.2, 0.6, 0.4, 0.2)
+    ACTION_SCALE = (
+        0.3, 0.4, 0.2, 0.6, 0.4, 0.2,
+        0.3, 0.4, 0.2, 0.6, 0.4, 0.2,
+    )
 
     # Measured from the MJCF by forward kinematics, not guessed: with
     # DEFAULT_POSE and the soles on the floor the torso origin sits here.
@@ -84,6 +92,7 @@ class NadirEnv:
         self.default_pose = jnp.array(self.DEFAULT_POSE)
         self.action_scale = jnp.array(self.ACTION_SCALE)
         self.reward_config = R.RewardConfig()
+        self.gait_period = self.reward_config.gait_period_s
 
         # Joint limits, read from the model rather than restated in Python.
         jnt_range = self.mj_model.jnt_range[1:]  # skip the free joint
@@ -210,7 +219,7 @@ class NadirEnv:
         data = jax.lax.fori_loop(0, self.decimation, body_fn, s.mjx_data)
 
         step_count = s.step_count + 1
-        gait_phase = (s.gait_phase + self.dt) % 1.0
+        gait_phase = (s.gait_phase + self.dt / self.gait_period) % 1.0
 
         # Resample the velocity command periodically. The previous version
         # hardcoded [0.5, 0, 0] at reset and never changed it, so the policy
@@ -244,6 +253,8 @@ class NadirEnv:
             R.yaw_rate_tracking_reward(base_ang_vel_b, command, c.tracking_sigma),
             R.upright_reward(projected_gravity),
             R.base_height_reward(torso_height, c.target_height),
+            R.gait_contact_reward(contact, gait_phase[0]),
+            R.foot_clearance_reward(sole_z, gait_phase[0], c.swing_height_m),
             R.feet_air_time_reward(air_time, first_contact, c.air_time_target),
             R.alive_reward(),
             R.lin_vel_z_penalty(base_lin_vel_b),
@@ -255,7 +266,8 @@ class NadirEnv:
         ]
         weights = [
             c.tracking_lin_vel, c.tracking_yaw_vel, c.upright, c.base_height,
-            c.feet_air_time, c.alive, c.lin_vel_z, c.ang_vel_xy, c.action_rate,
+            c.gait_contact, c.foot_clearance, c.feet_air_time, c.alive,
+            c.lin_vel_z, c.ang_vel_xy, c.action_rate,
             c.joint_vel, c.joint_limit, c.feet_slip,
         ]
         reward = R.total_reward(components, weights)

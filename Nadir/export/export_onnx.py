@@ -139,7 +139,7 @@ def main():
     p = argparse.ArgumentParser(description="Export the Nadir actor to ONNX")
     p.add_argument("--checkpoint", required=True, help="orbax checkpoint dir (e.g. .../best)")
     p.add_argument("--output", default="exported_models/nadir_policy.onnx")
-    p.add_argument("--obs-dim", type=int, default=41)
+    p.add_argument("--obs-dim", type=int, default=47)
     p.add_argument("--no-validate", action="store_true")
     args = p.parse_args()
 

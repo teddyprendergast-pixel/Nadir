@@ -87,5 +87,35 @@ def test_feet_air_time_pays_only_on_touchdown():
     assert R.feet_air_time_reward(air, np.array([1.0, 0.0])) > 0.0
 
 
+def test_gait_contact_rewards_alternating_stance():
+    """The env feeds the policy a gait clock; this is what makes it mean something."""
+    both_down = np.array([True, True])
+    r_down_l_up = np.array([True, False])
+    l_down_r_up = np.array([False, True])
+
+    # first half of the cycle: right foot should be down, left up
+    assert R.gait_contact_reward(r_down_l_up, 0.25) == pytest.approx(1.0)
+    assert R.gait_contact_reward(l_down_r_up, 0.25) == pytest.approx(0.0)
+    # second half: the other way round
+    assert R.gait_contact_reward(l_down_r_up, 0.75) == pytest.approx(1.0)
+    assert R.gait_contact_reward(r_down_l_up, 0.75) == pytest.approx(0.0)
+    # standing on both feet only ever half-satisfies the schedule
+    assert R.gait_contact_reward(both_down, 0.25) == pytest.approx(0.5)
+
+
+def test_foot_clearance_rewards_lifting_the_swing_foot():
+    target = 0.03
+    # phase < 0.5 -> left foot is swinging
+    lifted = np.array([0.0, target])
+    dragging = np.array([0.0, 0.0])
+    assert R.foot_clearance_reward(lifted, 0.25, target) > \
+           R.foot_clearance_reward(dragging, 0.25, target)
+    # the stance foot's height is irrelevant — only the swing foot is scored,
+    # so raising the stance foot must not change the reward at all
+    swing_only = R.foot_clearance_reward(np.array([0.0, 0.0]), 0.25, target)
+    stance_raised = R.foot_clearance_reward(np.array([target, 0.0]), 0.25, target)
+    assert stance_raised == pytest.approx(swing_only)
+
+
 def test_total_reward_is_a_weighted_sum():
     assert R.total_reward([1.0, 2.0, 3.0], [1.0, -1.0, 0.5]) == pytest.approx(0.5)

@@ -56,10 +56,10 @@ class EnvConfig:
     episode_length: int = 1000   # 20 s at 50 Hz
 
     # Robot
-    num_joints: int = 10
-    num_actions: int = 10
-    obs_dim: int = 41            # actor: what the BNO085 + encoders can see
-    privileged_obs_dim: int = 45 # critic: + body-frame base velocity, torso height
+    num_joints: int = 12         # 6 per leg, incl. hip yaw
+    num_actions: int = 12
+    obs_dim: int = 47            # actor: what the BNO085 + encoders can see
+    privileged_obs_dim: int = 51 # critic: + body-frame base velocity, torso height
 
     # Control
     decimation: int = 10         # 500 Hz physics per 50 Hz policy step

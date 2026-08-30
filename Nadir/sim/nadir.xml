@@ -39,11 +39,21 @@
       <camera name="tracking_cam" pos="0 -1.5 0.5" xyaxes="1 0 0 0 1 2" mode="trackcom" />
 
       <!-- Right Leg -->
-      <body name="hip_bracket_r" pos="0 -0.05 -0.04">
-        <joint name="hip_pitch_r" axis="0 1 0" range="-1.2 1.2" />
-        <geom type="box" size="0.02 0.02 0.02" mass="0.05" material="robot_mat" />
+      <body name="hip_yaw_link_r" pos="0 -0.05 -0.04">
+        <!-- Hip yaw. Without this the robot has no steering authority at all:
+             a 10-DOF version of this model tracked only 0.237 rad/s against a
+             0.80 rad/s turn command and drifted in yaw on every command,
+             because differential foot scuffing was its only source of torque
+             about z. Open Duck Mini V2 has this joint; dropping it made yaw
+             commands unachievable by construction. -->
+        <joint name="hip_yaw_r" axis="0 0 1" range="-0.6 0.6" />
+        <geom type="box" size="0.018 0.018 0.012" mass="0.04" material="robot_mat" />
 
-        <body name="upper_leg_r" pos="0 0 -0.02">
+        <body name="hip_bracket_r" pos="0 0 -0.01">
+          <joint name="hip_pitch_r" axis="0 1 0" range="-1.2 1.2" />
+          <geom type="box" size="0.02 0.02 0.02" mass="0.05" material="robot_mat" />
+
+        <body name="upper_leg_r" pos="0 0 -0.01">
           <joint name="hip_roll_r" axis="1 0 0" range="-0.4 0.4" />
           <geom type="capsule" size="0.015 0.05" pos="0 0 -0.05" mass="0.15" material="robot_mat" />
 
@@ -59,14 +69,25 @@
             </body>
           </body>
         </body>
+        </body>
       </body>
 
       <!-- Left Leg -->
-      <body name="hip_bracket_l" pos="0 0.05 -0.04">
-        <joint name="hip_pitch_l" axis="0 1 0" range="-1.2 1.2" />
-        <geom type="box" size="0.02 0.02 0.02" mass="0.05" material="robot_mat" />
+      <body name="hip_yaw_link_l" pos="0 0.05 -0.04">
+        <!-- Hip yaw. Without this the robot has no steering authority at all:
+             a 10-DOF version of this model tracked only 0.237 rad/s against a
+             0.80 rad/s turn command and drifted in yaw on every command,
+             because differential foot scuffing was its only source of torque
+             about z. Open Duck Mini V2 has this joint; dropping it made yaw
+             commands unachievable by construction. -->
+        <joint name="hip_yaw_l" axis="0 0 1" range="-0.6 0.6" />
+        <geom type="box" size="0.018 0.018 0.012" mass="0.04" material="robot_mat" />
 
-        <body name="upper_leg_l" pos="0 0 -0.02">
+        <body name="hip_bracket_l" pos="0 0 -0.01">
+          <joint name="hip_pitch_l" axis="0 1 0" range="-1.2 1.2" />
+          <geom type="box" size="0.02 0.02 0.02" mass="0.05" material="robot_mat" />
+
+        <body name="upper_leg_l" pos="0 0 -0.01">
           <joint name="hip_roll_l" axis="1 0 0" range="-0.4 0.4" />
           <geom type="capsule" size="0.015 0.05" pos="0 0 -0.05" mass="0.15" material="robot_mat" />
 
@@ -81,6 +102,7 @@
               <site name="foot_contact_l" pos="0 0 -0.01" size="0.01" type="sphere" rgba="0 1 0 0" />
             </body>
           </body>
+        </body>
         </body>
       </body>
 
@@ -97,11 +119,13 @@
        datasheet stall torque (2.94 N.m) and is optimistic as a continuous
        limit; Phase 1 measures the real torque_limit_nm. -->
   <actuator>
+    <position name="hip_yaw_r"     joint="hip_yaw_r"     ctrlrange="-0.6 0.6" forcerange="-3 3" kp="40" kv="2" />
     <position name="hip_pitch_r"   joint="hip_pitch_r"   ctrlrange="-1.2 1.2" forcerange="-3 3" kp="40" kv="2" />
     <position name="hip_roll_r"    joint="hip_roll_r"    ctrlrange="-0.4 0.4" forcerange="-3 3" kp="40" kv="2" />
     <position name="knee_r"        joint="knee_r"        ctrlrange="-0.1 2.0" forcerange="-3 3" kp="40" kv="2" />
     <position name="ankle_pitch_r" joint="ankle_pitch_r" ctrlrange="-0.8 0.8" forcerange="-3 3" kp="40" kv="2" />
     <position name="ankle_roll_r"  joint="ankle_roll_r"  ctrlrange="-0.3 0.3" forcerange="-3 3" kp="40" kv="2" />
+    <position name="hip_yaw_l"     joint="hip_yaw_l"     ctrlrange="-0.6 0.6" forcerange="-3 3" kp="40" kv="2" />
     <position name="hip_pitch_l"   joint="hip_pitch_l"   ctrlrange="-1.2 1.2" forcerange="-3 3" kp="40" kv="2" />
     <position name="hip_roll_l"    joint="hip_roll_l"    ctrlrange="-0.4 0.4" forcerange="-3 3" kp="40" kv="2" />
     <position name="knee_l"        joint="knee_l"        ctrlrange="-0.1 2.0" forcerange="-3 3" kp="40" kv="2" />

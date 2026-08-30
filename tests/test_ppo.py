@@ -18,7 +18,7 @@ def trainer():
 
 def _init_opt_state(trainer):
     params = trainer.actor_critic.init(
-        jax.random.PRNGKey(0), jnp.zeros((1, 41)), jnp.zeros((1, 45))
+        jax.random.PRNGKey(0), jnp.zeros((1, 47)), jnp.zeros((1, 51))
     )
     return trainer.optimizer.init(params)
 

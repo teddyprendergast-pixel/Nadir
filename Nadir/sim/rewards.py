@@ -16,10 +16,12 @@ import jax.numpy as jnp
 class RewardConfig:
     # Task terms (positive weight, reward is in [0, 1])
     tracking_lin_vel: float = 1.5
-    tracking_yaw_vel: float = 0.8
+    tracking_yaw_vel: float = 1.0   # raised: with hip yaw this is now achievable
     upright: float = 0.5
     base_height: float = 0.5
-    feet_air_time: float = 1.0
+    gait_contact: float = 0.5
+    foot_clearance: float = 0.3
+    feet_air_time: float = 0.3
     alive: float = 0.15
 
     # Regularisation terms (negative weight, function returns a cost >= 0)
@@ -32,6 +34,8 @@ class RewardConfig:
 
     # Kernel widths / targets
     tracking_sigma: float = 0.25
+    gait_period_s: float = 0.6      # one full left-right cycle
+    swing_height_m: float = 0.03    # target sole clearance mid-swing
     # Measured from the MJCF by forward kinematics: the torso origin height
     # with DEFAULT_POSE and the soles on the floor. Must stay <= the model's
     # straight-legged maximum of 0.2700 m, or this term becomes a permanent
@@ -74,6 +78,34 @@ def upright_reward(projected_gravity):
 def base_height_reward(base_height, target_height=0.2577):
     """Gaussian around the target standing height. 1.0 at the target."""
     return jnp.exp(-40.0 * jnp.square(base_height - target_height))
+
+
+def gait_contact_reward(contact, phase):
+    """Reward matching an alternating left/right contact schedule.
+
+    The environment already feeds the policy a gait-phase clock in its
+    observation, but nothing rewarded following it — so the policy had a
+    clock and no reason to use it, and settled into a flat-footed shuffle.
+    This closes that loop: the right foot should be in stance for the first
+    half of the cycle and the left foot for the second.
+    """
+    desired_stance_r = phase < 0.5
+    desired_stance_l = jnp.logical_not(desired_stance_r)
+    desired = jnp.stack([desired_stance_r, desired_stance_l]).reshape(2)
+    return jnp.mean((contact == desired).astype(jnp.float32))
+
+
+def foot_clearance_reward(sole_height, phase, target=0.03, sigma=0.02):
+    """Reward the *swing* foot lifting to a target height.
+
+    Without this the cheapest way to satisfy the contact schedule is to barely
+    unweight a foot while sliding it, which reads as a shuffle and transfers
+    badly to a real robot with backlash and finite servo bandwidth.
+    """
+    swing_r = phase >= 0.5
+    swing = jnp.stack([swing_r, jnp.logical_not(swing_r)]).reshape(2)
+    close = jnp.exp(-jnp.square((sole_height - target) / sigma))
+    return jnp.mean(close * swing.astype(jnp.float32))
 
 
 def feet_air_time_reward(air_time, first_contact, target=0.25):
