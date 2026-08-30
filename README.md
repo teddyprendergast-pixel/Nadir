@@ -6,14 +6,21 @@ budget of roughly €700.
 This is a fork-in-spirit of [Open Duck Mini V2](https://github.com/apirrone/Open_Duck_Mini).
 We intend to inherit its training and runtime stack rather than reimplement it.
 
-> **Status: Phase 0.** The repository was reset on 2026-08-21. The previous
-> contents were AI-generated scaffolding for a different robot and have been
-> removed — see [docs/audit-2026-08-21.md](docs/audit-2026-08-21.md) for what
-> was there and why it went. The full scaffold remains in git history at tag
-> `scaffold-archive` (commit `31ebc64`); nothing was destroyed.
+> **Status: Phase 0.** The repository was reset on 2026-08-21 after the
+> previous contents turned out to be AI-generated scaffolding for a different
+> robot — see [docs/audit-2026-08-21.md](docs/audit-2026-08-21.md). The
+> scaffold remains in history at tag `scaffold-archive` (commit `31ebc64`).
 >
-> **There is no working code here yet.** This README describes what is planned.
-> Anything not marked as existing does not exist.
+> An MJX training stack was then merged in `f751b86`. It had never been run:
+> it could not import on a case-sensitive filesystem, and underneath that its
+> upright reward was sign-inverted, every episode terminated on step 1, and
+> nothing ever reset a terminated environment. See
+> [docs/audit-2026-08-30.md](docs/audit-2026-08-30.md).
+>
+> **Branch `rob` repairs it and trains on CINECA Leonardo.** What exists is
+> listed below; anything not listed does not exist. Domain randomisation and
+> latency modelling remain **off**, blocked on Phase 1 measurements — see
+> §4 of that audit.
 
 ---
 
@@ -100,12 +107,30 @@ Only what actually exists is listed.
 
 ```
 Nadir/
+├── Nadir/
+│   ├── sim/
+│   │   ├── nadir.xml           # 10-DOF MJCF, <position> actuators
+│   │   ├── env_mjx.py          # MJX training env (auto-resetting)
+│   │   ├── rewards.py          # reward terms + weights (single source of truth)
+│   │   ├── sim2sim.py          # run an ONNX policy in vanilla MuJoCo
+│   │   ├── domain_rand.py      # NOT WIRED IN — blocked on Phase 1 measurement
+│   │   └── terrains.py         # NOT WIRED IN
+│   ├── training/               # PPO (config, networks, ppo, train)
+│   ├── export/export_onnx.py   # Flax actor -> ONNX, no torch/TF
+│   ├── deploy/                 # Pi-side loop — NOT RUN, see audit §3
+│   ├── vision/                 # Phase 4 — out of scope, see audit §3
+│   └── navigation/             # not in the phase plan at all, see audit §3
 ├── docs/
-│   └── audit-2026-08-21.md     # why the previous scaffold was removed
+│   ├── audit-2026-08-21.md     # why the original scaffold was removed
+│   └── audit-2026-08-30.md     # why the f751b86 training stack could not learn
 ├── hardware/
 │   └── measured/               # measured hardware parameters (schema, currently null)
 │       ├── README.md
 │       └── actuators.yaml
+├── scripts/
+│   ├── train_leonardo.sbatch   # SLURM for CINECA Leonardo (boost, A100)
+│   └── visualize_sim.py        # interactive viewer (needs a display)
+├── tests/                      # 21 tests; regression guards for the audit findings
 ├── upstream/
 │   └── runtime/                # submodule: Open_Duck_Mini_Runtime @ v2 (pinned)
 ├── .gitignore
@@ -125,6 +150,37 @@ git submodule update --init --recursive
 
 ---
 
+## Running the training
+
+Tested on **CINECA Leonardo** (`boost_usr_prod`, A100-SXM-64GB, account
+`INF26_npqcd`). The environment is a plain venv on scratch — no conda:
+
+```bash
+module load python/3.11.7
+python3 -m venv <path>/nadir-venv && source <path>/nadir-venv/bin/activate
+pip install "jax[cuda12]" mujoco mujoco-mjx flax optax orbax-checkpoint \
+            numpy pyyaml onnx onnxruntime imageio imageio-ffmpeg pytest
+```
+
+**Do not `module load cuda`.** The `jax[cuda12]` wheels bundle their own CUDA
+runtime and only need `libcuda.so` from the node driver. Loading Leonardo's
+CUDA module shadows them and JAX fails with `Unable to load cuSPARSE`, then
+falls back to CPU.
+
+```bash
+sbatch scripts/train_leonardo.sbatch                    # full run
+python -m pytest tests/ -q                              # 21 tests, CPU, ~50 s
+python -m Nadir.export.export_onnx --checkpoint runs/<run>/best \
+       --output exported_models/nadir_policy.onnx
+MUJOCO_GL=egl python -m Nadir.sim.sim2sim \
+       --onnx exported_models/nadir_policy.onnx --video docs/walk.mp4
+```
+
+Paths in the sbatch script are absolute and Leonardo-specific; INFN-Pisa needs
+its own partition, account and venv path.
+
+---
+
 ## Open decisions
 
 Resolve these before Phase 1 hardware is ordered.
@@ -141,9 +197,11 @@ Resolve these before Phase 1 hardware is ordered.
 1. ~~Add `Open_Duck_Mini_Runtime` as a pinned submodule~~ — done, see
    `upstream/runtime`.
 2. Fork [`apirrone/Open_Duck_Playground`](https://github.com/apirrone/Open_Duck_Playground)
-   and get its example training running on the INFN cluster **unmodified**,
-   with upstream's duck, before changing a line. This is the Phase 0 exit
-   criterion and doubles as a check on the SLURM/JAX/GPU setup.
+   and get its example training running on the cluster **unmodified**, with
+   upstream's duck, before changing a line. This is the Phase 0 exit
+   criterion. **Still open.** Branch `rob` repaired and ran the *custom* stack
+   instead, which validated the SLURM/JAX/GPU setup but is not the same thing
+   — it has no reference that is known to walk.
 3. Read `upstream/runtime/mini_bdx_runtime/` — particularly
    `rustypot_position_hwi.py` and `onnx_infer.py` — before writing anything
    that talks to a servo.
