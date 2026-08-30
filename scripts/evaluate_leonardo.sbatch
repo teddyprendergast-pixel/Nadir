@@ -27,7 +27,13 @@ set -euo pipefail
 REPO=/leonardo_scratch/large/userexternal/rdionisi/fun/Nadir
 VENV=/leonardo_scratch/large/userexternal/rdionisi/fun/nadir-venv
 RUN="${NADIR_RUN:?set NADIR_RUN to the run directory name under runs/}"
+# Default to `best`, but allow pointing at a specific update_N. Prefer a
+# completed update_N while training is still live: `best` is rewritten in
+# place by the running job, so reading it can catch a partial write.
 CKPT="${NADIR_CKPT:-$REPO/runs/$RUN/best}"
+TAG="${NADIR_TAG:-$RUN}"
+ONNX="${NADIR_ONNX:-exported_models/nadir_policy_$TAG.onnx}"
+VIDEO="${NADIR_VIDEO:-docs/nadir_walk_$TAG.mp4}"
 
 module purge
 module load python/3.11.7          # no cuda module — see train_leonardo.sbatch
@@ -35,19 +41,24 @@ source "$VENV/bin/activate"
 cd "$REPO"
 mkdir -p logs exported_models docs
 
-export JAX_PLATFORMS=cpu           # evaluation is single-env; CPU is plenty
-export MUJOCO_GL=egl               # this is what the GPU is actually for
+# JAX must run on the same platform the checkpoint was written on. orbax
+# stores device topology, and restoring a GPU-written checkpoint under
+# JAX_PLATFORMS=cpu fails with "Topology mismatch detected" unless you hand
+# it a target tree — which we cannot do cheaply here, because the saved
+# opt_state belongs to whichever optimiser that run used.
+export JAX_PLATFORMS=cuda
+export MUJOCO_GL=egl               # offscreen rendering needs an EGL device
 
 echo "=== $(date -Is) evaluating $CKPT ==="
 
 python -u -m Nadir.export.export_onnx \
     --checkpoint "$CKPT" \
-    --output "exported_models/nadir_policy.onnx"
+    --output "$ONNX"
 
 python -u -m Nadir.sim.sim2sim \
-    --onnx exported_models/nadir_policy.onnx \
-    --seconds 20 --seeds 5 \
-    --video "docs/nadir_walk.mp4"
+    --onnx "$ONNX" \
+    --seconds "${NADIR_SECONDS:-20}" --seeds "${NADIR_SEEDS:-5}" \
+    --video "$VIDEO"
 
 python -u - <<'PY'
 import csv, os
@@ -80,10 +91,11 @@ for ax, (key, label, ylim) in zip(axes.flat, panels):
     if ylim: ax.set_ylim(*ylim)
 for ax in axes[1]:
     ax.set_xlabel("environment steps (millions)")
-fig.suptitle(f"Nadir PPO — {run} (A100, MJX)")
+fig.suptitle(f"Nadir PPO — {os.environ.get('NADIR_TAG', run)} (A100, MJX)")
 fig.tight_layout()
-fig.savefig("docs/training_curve.png", dpi=140)
-print("wrote docs/training_curve.png")
+out = f"docs/training_curve_{os.environ.get('NADIR_TAG', run)}.png"
+fig.savefig(out, dpi=140)
+print("wrote", out)
 PY
 
 echo "=== $(date -Is) done ==="

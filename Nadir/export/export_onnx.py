@@ -101,18 +101,28 @@ def build_onnx(params, obs_dim, default_pose, action_scale, ctrl_lower, ctrl_upp
 
 
 def validate(model_path, params, actor_critic, obs_dim, num_tests=256, tol=1e-5):
-    """Check the ONNX graph reproduces the JAX actor's mean action."""
+    """Check the ONNX graph reproduces the JAX actor's mean action.
+
+    The JAX side is forced to full float32. On an A100, JAX defaults to TF32
+    for matmuls, which carries ~10 mantissa bits and disagrees with ONNX
+    Runtime's float32 CPU kernels at the 1e-3 level. That failure looks
+    exactly like a broken export but is the *reference* being imprecise, not
+    the graph — so pin the precision rather than loosening the tolerance.
+    """
     import jax
     import jax.numpy as jnp
     import onnxruntime as ort
 
-    sess = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+    so = ort.SessionOptions()
+    so.intra_op_num_threads = 1   # also silences pthread_setaffinity spam on HPC nodes
+    sess = ort.InferenceSession(model_path, so, providers=["CPUExecutionProvider"])
     in_name = sess.get_inputs()[0].name
 
     rng = jax.random.PRNGKey(0)
     obs = jax.random.normal(rng, (num_tests, obs_dim)) * 0.5
 
-    mean, _ = actor_critic.apply(params, obs, method=lambda m, o: m.actor(o))
+    with jax.default_matmul_precision("highest"):
+        mean, _ = actor_critic.apply(params, obs, method=lambda m, o: m.actor(o))
     jax_action = np.asarray(jnp.clip(mean, -1.0, 1.0))
 
     onnx_action = sess.run(["action"], {in_name: np.asarray(obs, dtype=np.float32)})[0]
