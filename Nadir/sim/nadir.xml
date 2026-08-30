@@ -1,7 +1,10 @@
 <mujoco model="nadir">
-  <compiler angle="radian" meshdir="meshes/" />
-  
-  <option timestep="0.002" iterations="50" solver="Newton" tolerance="1e-10" />
+  <compiler angle="radian" meshdir="meshes/" autolimits="true" />
+
+  <!-- 500 Hz physics, decimated 10:1 to the 50 Hz control loop.
+       iterations/ls_iterations are tuned for MJX throughput: this is a small
+       biped with at most a few contacts, so 10 Newton iterations converge. -->
+  <option timestep="0.002" iterations="10" ls_iterations="8" solver="Newton" tolerance="1e-8" />
 
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="512" />
@@ -10,11 +13,26 @@
     <material name="robot_mat" rgba="0.2 0.2 0.2 1" />
   </asset>
 
+  <default>
+    <!-- PROVISIONAL, NOT MEASURED. armature/damping/frictionloss stand in for
+         the STS3215's reflected rotor inertia and internal friction. Without
+         armature the kp below is numerically stiff at dt=2 ms and the joints
+         chatter. These are order-of-magnitude values in the Open Duck Mini
+         range, present so the sim is stable — they are NOT system-ID output.
+         Phase 1 replaces them from hardware/measured/actuators.yaml
+         (actuator_model.fitted.*), which is currently all null by design. -->
+    <joint type="hinge" armature="0.01" damping="0.1" frictionloss="0.02" />
+  </default>
+
   <worldbody>
     <light directional="true" diffuse=".8 .8 .8" specular=".2 .2 .2" pos="0 0 5" dir="0 0 -1" />
-    <geom name="floor" type="plane" size="0 0 1" material="matplane" condim="3" />
-    
-    <body name="torso" pos="0 0 0.35">
+    <geom name="floor" type="plane" size="0 0 1" material="matplane" condim="3" friction="1.0 0.005 0.0001" />
+
+    <!-- Spawn height: the leg chain is 0.04 + 0.02 + 0.10 + 0.10 + 0.01 =
+         0.27 m from torso origin to sole with the joints at zero, so the old
+         0.35 spawned the robot 8 cm in the air. 0.27 with the default bent
+         pose gives a small settling drop. -->
+    <body name="torso" pos="0 0 0.27">
       <freejoint name="root" />
       <geom name="torso_geom" type="capsule" size="0.04 0.04" rgba="0.8 0.2 0.2 1" mass="0.5" />
       <site name="imu_site" pos="0 0 0" size="0.01" />
@@ -22,21 +40,21 @@
 
       <!-- Right Leg -->
       <body name="hip_bracket_r" pos="0 -0.05 -0.04">
-        <joint name="hip_pitch_r" type="hinge" axis="0 1 0" range="-1.2 1.2" />
+        <joint name="hip_pitch_r" axis="0 1 0" range="-1.2 1.2" />
         <geom type="box" size="0.02 0.02 0.02" mass="0.05" material="robot_mat" />
-        
+
         <body name="upper_leg_r" pos="0 0 -0.02">
-          <joint name="hip_roll_r" type="hinge" axis="1 0 0" range="-0.4 0.4" />
+          <joint name="hip_roll_r" axis="1 0 0" range="-0.4 0.4" />
           <geom type="capsule" size="0.015 0.05" pos="0 0 -0.05" mass="0.15" material="robot_mat" />
-          
+
           <body name="lower_leg_r" pos="0 0 -0.1">
-            <joint name="knee_r" type="hinge" axis="0 1 0" range="-0.1 2.0" />
+            <joint name="knee_r" axis="0 1 0" range="-0.1 2.0" />
             <geom type="capsule" size="0.012 0.05" pos="0 0 -0.05" mass="0.12" material="robot_mat" />
-            
+
             <body name="foot_r" pos="0 0 -0.1">
-              <joint name="ankle_pitch_r" type="hinge" axis="0 1 0" range="-0.8 0.8" />
-              <joint name="ankle_roll_r" type="hinge" axis="1 0 0" range="-0.3 0.3" />
-              <geom type="box" size="0.025 0.015 0.005" pos="0 0 -0.005" mass="0.08" material="robot_mat" />
+              <joint name="ankle_pitch_r" axis="0 1 0" range="-0.8 0.8" />
+              <joint name="ankle_roll_r" axis="1 0 0" range="-0.3 0.3" />
+              <geom name="foot_geom_r" type="box" size="0.025 0.015 0.005" pos="0 0 -0.005" mass="0.08" material="robot_mat" friction="1.0 0.005 0.0001" />
               <site name="foot_contact_r" pos="0 0 -0.01" size="0.01" type="sphere" rgba="0 1 0 0" />
             </body>
           </body>
@@ -45,21 +63,21 @@
 
       <!-- Left Leg -->
       <body name="hip_bracket_l" pos="0 0.05 -0.04">
-        <joint name="hip_pitch_l" type="hinge" axis="0 1 0" range="-1.2 1.2" />
+        <joint name="hip_pitch_l" axis="0 1 0" range="-1.2 1.2" />
         <geom type="box" size="0.02 0.02 0.02" mass="0.05" material="robot_mat" />
-        
+
         <body name="upper_leg_l" pos="0 0 -0.02">
-          <joint name="hip_roll_l" type="hinge" axis="1 0 0" range="-0.4 0.4" />
+          <joint name="hip_roll_l" axis="1 0 0" range="-0.4 0.4" />
           <geom type="capsule" size="0.015 0.05" pos="0 0 -0.05" mass="0.15" material="robot_mat" />
-          
+
           <body name="lower_leg_l" pos="0 0 -0.1">
-            <joint name="knee_l" type="hinge" axis="0 1 0" range="-0.1 2.0" />
+            <joint name="knee_l" axis="0 1 0" range="-0.1 2.0" />
             <geom type="capsule" size="0.012 0.05" pos="0 0 -0.05" mass="0.12" material="robot_mat" />
-            
+
             <body name="foot_l" pos="0 0 -0.1">
-              <joint name="ankle_pitch_l" type="hinge" axis="0 1 0" range="-0.8 0.8" />
-              <joint name="ankle_roll_l" type="hinge" axis="1 0 0" range="-0.3 0.3" />
-              <geom type="box" size="0.025 0.015 0.005" pos="0 0 -0.005" mass="0.08" material="robot_mat" />
+              <joint name="ankle_pitch_l" axis="0 1 0" range="-0.8 0.8" />
+              <joint name="ankle_roll_l" axis="1 0 0" range="-0.3 0.3" />
+              <geom name="foot_geom_l" type="box" size="0.025 0.015 0.005" pos="0 0 -0.005" mass="0.08" material="robot_mat" friction="1.0 0.005 0.0001" />
               <site name="foot_contact_l" pos="0 0 -0.01" size="0.01" type="sphere" rgba="0 1 0 0" />
             </body>
           </body>
@@ -69,23 +87,30 @@
     </body>
   </worldbody>
 
+  <!-- Position actuators: the STS3215 closes its own loop and accepts a goal
+       position, so ctrl is a joint angle in RADIANS. ctrlrange must therefore
+       equal the joint's range — the previous "-1 1" silently clamped the knee
+       (range 2.0) and both hip pitches (range 1.2), so a large part of the
+       policy's commanded action space was unreachable.
+
+       kp/kv are PROVISIONAL, as above. forcerange 3 N.m is the STS3215
+       datasheet stall torque (2.94 N.m) and is optimistic as a continuous
+       limit; Phase 1 measures the real torque_limit_nm. -->
   <actuator>
-    <position name="hip_pitch_r" joint="hip_pitch_r" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="hip_roll_r" joint="hip_roll_r" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="knee_r" joint="knee_r" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="ankle_pitch_r" joint="ankle_pitch_r" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="ankle_roll_r" joint="ankle_roll_r" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="hip_pitch_l" joint="hip_pitch_l" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="hip_roll_l" joint="hip_roll_l" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="knee_l" joint="knee_l" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="ankle_pitch_l" joint="ankle_pitch_l" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
-    <position name="ankle_roll_l" joint="ankle_roll_l" ctrlrange="-1 1" forcerange="-3 3" kp="40" kv="2" />
+    <position name="hip_pitch_r"   joint="hip_pitch_r"   ctrlrange="-1.2 1.2" forcerange="-3 3" kp="40" kv="2" />
+    <position name="hip_roll_r"    joint="hip_roll_r"    ctrlrange="-0.4 0.4" forcerange="-3 3" kp="40" kv="2" />
+    <position name="knee_r"        joint="knee_r"        ctrlrange="-0.1 2.0" forcerange="-3 3" kp="40" kv="2" />
+    <position name="ankle_pitch_r" joint="ankle_pitch_r" ctrlrange="-0.8 0.8" forcerange="-3 3" kp="40" kv="2" />
+    <position name="ankle_roll_r"  joint="ankle_roll_r"  ctrlrange="-0.3 0.3" forcerange="-3 3" kp="40" kv="2" />
+    <position name="hip_pitch_l"   joint="hip_pitch_l"   ctrlrange="-1.2 1.2" forcerange="-3 3" kp="40" kv="2" />
+    <position name="hip_roll_l"    joint="hip_roll_l"    ctrlrange="-0.4 0.4" forcerange="-3 3" kp="40" kv="2" />
+    <position name="knee_l"        joint="knee_l"        ctrlrange="-0.1 2.0" forcerange="-3 3" kp="40" kv="2" />
+    <position name="ankle_pitch_l" joint="ankle_pitch_l" ctrlrange="-0.8 0.8" forcerange="-3 3" kp="40" kv="2" />
+    <position name="ankle_roll_l"  joint="ankle_roll_l"  ctrlrange="-0.3 0.3" forcerange="-3 3" kp="40" kv="2" />
   </actuator>
 
   <sensor>
     <accelerometer name="accel" site="imu_site" />
     <gyro name="gyro" site="imu_site" />
-    <touch name="touch_foot_r" site="foot_contact_r" />
-    <touch name="touch_foot_l" site="foot_contact_l" />
   </sensor>
 </mujoco>
