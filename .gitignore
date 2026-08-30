@@ -9,7 +9,11 @@ venv/
 # JAX / XLA
 .jax_cache/
 
-# Training outputs — never commit these
+# Training outputs — never commit these.
+# NOTE: checkpoints/ and tensorboard_logs/ were committed in f751b86 *before*
+# these rules existed, so the rules never applied to them. 169 MB of
+# Stable-Baselines3 .zip checkpoints — a framework CLAUDE.md bans — were
+# tracked. Removed from HEAD on branch `rob`; still in history.
 checkpoints/
 runs/
 logs/
