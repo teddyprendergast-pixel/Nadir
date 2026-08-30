@@ -144,7 +144,8 @@ def test_step_runs_and_environments_auto_reset_on_termination(env):
     flipped = state.mjx_data.qpos.at[:, 3:7].set(jnp.array([0.0, 1.0, 0.0, 0.0]))
     state = state.replace(mjx_data=state.mjx_data.replace(qpos=flipped))
 
-    state, obs, priv, reward, done, terminated = env.step(state, jnp.zeros((2, 10)))
+    (state, obs, priv, reward, done, terminated,
+     ep_return, ep_length) = env.step(state, jnp.zeros((2, 10)))
 
     assert bool(np.all(np.asarray(terminated))), "inverted torso must terminate"
     assert bool(np.all(np.asarray(done)))
@@ -154,6 +155,40 @@ def test_step_runs_and_environments_auto_reset_on_termination(env):
     )
     assert np.all(np.isfinite(np.asarray(obs)))
     assert np.all(np.isfinite(np.asarray(reward)))
+
+
+def test_episode_statistics_reset_with_the_episode(env):
+    """episode_return and step_count are per-episode accumulators.
+
+    Carrying them across the auto-reset turns them into a running total since
+    the environment was created, which silently makes the reported "episode
+    return" a monotonically increasing number that tracks wall-clock progress
+    rather than policy quality — and makes best-checkpoint selection pick the
+    latest checkpoint every time.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    state, _, _ = env.reset(jax.random.split(jax.random.PRNGKey(3), 2))
+
+    # One ordinary step: the accumulators advance.
+    state, _, _, reward, done, _, ep_ret, ep_len = env.step(state, jnp.zeros((2, 10)))
+    assert not bool(np.any(np.asarray(done)))
+    assert np.allclose(np.asarray(state.episode_return), np.asarray(reward))
+    assert bool(np.all(np.asarray(state.step_count) == 1))
+
+    # Force termination: the *returned* statistics describe the finished
+    # episode, while the state that comes back has already reset to zero.
+    flipped = state.mjx_data.qpos.at[:, 3:7].set(jnp.array([0.0, 1.0, 0.0, 0.0]))
+    state = state.replace(mjx_data=state.mjx_data.replace(qpos=flipped))
+    state, _, _, _, done, _, ep_ret, ep_len = env.step(state, jnp.zeros((2, 10)))
+
+    assert bool(np.all(np.asarray(done)))
+    assert bool(np.all(np.asarray(ep_len) == 2)), np.asarray(ep_len)
+    assert bool(np.all(np.asarray(state.episode_return) == 0.0)), (
+        f"episode_return leaked across the reset: {np.asarray(state.episode_return)}"
+    )
+    assert bool(np.all(np.asarray(state.step_count) == 0))
 
 
 def test_commands_are_resampled_during_an_episode(env):

@@ -203,14 +203,11 @@ class PPOTrainer:
             log_prob = jnp.sum(log_prob, axis=-1)
 
             # The env owns its RNG streams, one per environment, so stepping
-            # takes no key here. Episode statistics are read *before* the
-            # auto-reset zeroes them.
-            episode_return = env_state.episode_return
-            episode_length = env_state.step_count
-
-            next_env_state, next_obs, next_priv_obs, reward, done, terminated = self.env.step(
-                env_state, action
-            )
+            # takes no key here. It hands back the completed episode's return
+            # and length, which cannot be read off the returned state because
+            # that state has already auto-reset.
+            (next_env_state, next_obs, next_priv_obs, reward, done, terminated,
+             episode_return, episode_length) = self.env.step(env_state, action)
 
             transition = Transition(
                 obs=obs,
@@ -221,8 +218,8 @@ class PPOTrainer:
                 terminated=terminated,
                 value=value,
                 log_prob=log_prob,
-                episode_return=next_env_state.episode_return,
-                episode_length=episode_length + 1,
+                episode_return=episode_return,
+                episode_length=episode_length,
             )
             return (next_env_state, next_obs, next_priv_obs, rng), transition
 

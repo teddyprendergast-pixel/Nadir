@@ -311,19 +311,27 @@ class NadirEnv:
         )
         next_state = jax.tree_util.tree_map(_sel, fresh, stepped)
         next_state = next_state.replace(mjx_data=reset_data)
-        # The transition the learner sees must carry this step's reward/done
-        # and episode statistics, not the fresh episode's zeros.
+        # reward/done/terminated describe the transition just taken, so they
+        # survive the reset. episode_return and step_count must NOT: they are
+        # per-episode accumulators, and carrying them across the reset turns
+        # them into a running total since the env was created.
         next_state = next_state.replace(
-            reward=reward,
-            done=done,
-            terminated=terminated,
-            episode_return=episode_return,
+            reward=reward, done=done, terminated=terminated
         )
 
-        return next_state, next_state.obs, next_state.privileged_obs, reward, done, terminated
+        # The completed episode's statistics are returned separately, because
+        # by construction they are gone from the state once it has reset.
+        return (next_state, next_state.obs, next_state.privileged_obs,
+                reward, done, terminated, episode_return, step_count)
 
     def step(self, state: EnvState, action: jnp.ndarray):
-        """Vectorised step. RNG lives inside the state, one stream per env."""
+        """Vectorised step. RNG lives inside the state, one stream per env.
+
+        Returns (state, obs, privileged_obs, reward, done, terminated,
+        episode_return, episode_length). The last two are the *completed*
+        episode's totals on a step where `done` is set, and are meaningless
+        otherwise — mask them with `done` before averaging.
+        """
         return jax.vmap(self._step_single)(state, action)
 
     # --- observations -------------------------------------------------------
