@@ -20,23 +20,32 @@ class RewardConfig:
     upright: float = 0.5
     base_height: float = 0.5
     gait_contact: float = 0.5
-    foot_clearance: float = 0.3
+    foot_clearance: float = 0.5
     feet_air_time: float = 0.3
     alive: float = 0.15
 
     # Regularisation terms (negative weight, function returns a cost >= 0)
     lin_vel_z: float = -1.0
     ang_vel_xy: float = -0.05
-    action_rate: float = -0.01
+    action_rate: float = -0.02
     joint_vel: float = -1e-3
     joint_limit: float = -1.0
-    feet_slip: float = -0.05
+    feet_slip: float = -0.1
+
+    # Gait naturalness. Without these the policy satisfies the contact
+    # schedule with a splayed, twitchy, forward-leaning motion that is
+    # technically walking and does not look like it.
+    orientation: float = -2.0        # torso tilt
+    joint_deviation: float = -0.5    # hip yaw/roll and ankle roll drift
+    action_smoothness: float = -0.01 # second difference of the command
+    stance_width: float = -0.5       # feet under the hips, and not crossing
 
     # Kernel widths / targets
     tracking_sigma: float = 0.25
     gait_period_s: float = 0.6      # one full left-right cycle
-    swing_height_m: float = 0.03    # target sole clearance mid-swing
+    swing_height_m: float = 0.04    # target sole clearance mid-swing
     move_cmd_threshold: float = 0.05  # |command| below this means 'stand still'
+    stance_half_width_m: float = 0.05 # nominal lateral foot offset from centre
     # Measured from the MJCF by forward kinematics: the torso origin height
     # with DEFAULT_POSE and the soles on the floor. Must stay <= the model's
     # straight-legged maximum of 0.2700 m, or this term becomes a permanent
@@ -170,6 +179,52 @@ def joint_limit_penalty(joint_pos, lower, upper, margin=0.05):
 def feet_slip_penalty(foot_vel_xy, in_contact):
     """Penalise horizontal foot motion while loaded."""
     return jnp.sum(jnp.sum(jnp.square(foot_vel_xy), axis=-1) * in_contact)
+
+
+def orientation_penalty(projected_gravity):
+    """Penalise torso tilt directly.
+
+    `upright_reward` is cos(tilt), which is flat near upright — at 20 degrees
+    it still pays 0.94, so it barely discourages a persistent lean. The
+    squared horizontal components of projected gravity have their steepest
+    gradient exactly where we care, at small tilt.
+    """
+    return jnp.sum(jnp.square(projected_gravity[:2]))
+
+
+def joint_deviation_penalty(joint_pos, default_pose, mask):
+    """Penalise drift from the nominal pose on selected joints.
+
+    Applied to hip yaw, hip roll and ankle roll. Left unconstrained these
+    splay the legs outward and roll the feet, which satisfies every other
+    reward term while looking nothing like walking. Hip pitch, knee and ankle
+    pitch are deliberately excluded — those are the joints that must move
+    freely to produce a stride.
+    """
+    return jnp.sum(jnp.square((joint_pos - default_pose) * mask))
+
+
+def action_smoothness_penalty(action, prev_action, prev_action_2):
+    """Second difference of the commanded position.
+
+    `action_rate_penalty` penalises the velocity of the goal-position signal;
+    this penalises its acceleration. That is what removes the high-frequency
+    twitch a position-controlled servo cannot reproduce anyway.
+    """
+    return jnp.sum(jnp.square(action - 2.0 * prev_action + prev_action_2))
+
+
+def stance_width_penalty(foot_y_body, half_width=0.05):
+    """Keep the feet under the hips, and stop them crossing.
+
+    `foot_y_body` is (right_y, left_y) in the torso frame, so the right foot
+    should sit near -half_width and the left near +half_width.
+    """
+    target = jnp.array([-half_width, half_width])
+    offset = jnp.sum(jnp.square(foot_y_body - target))
+    # Explicit crossing term: right foot to the left of the left foot.
+    crossed = jnp.clip(foot_y_body[0] - foot_y_body[1], 0.0, None)
+    return offset + jnp.square(crossed)
 
 
 def total_reward(components, weights):

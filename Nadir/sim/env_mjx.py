@@ -21,6 +21,7 @@ import flax.struct
 import jax
 import jax.numpy as jnp
 import mujoco
+import numpy as np
 from mujoco import mjx
 
 from . import rewards as R
@@ -37,6 +38,7 @@ class EnvState:
     step_count: jnp.ndarray
     command: jnp.ndarray
     previous_action: jnp.ndarray
+    previous_action_2: jnp.ndarray  # for the second-difference smoothness term
     action_buffer: jnp.ndarray  # (latency_steps + 1, nu) FIFO of goal positions
     gait_phase: jnp.ndarray
     feet_air_time: jnp.ndarray
@@ -93,6 +95,16 @@ class NadirEnv:
         self.action_scale = jnp.array(self.ACTION_SCALE)
         self.reward_config = R.RewardConfig()
         self.gait_period = self.reward_config.gait_period_s
+
+        # Joints held near nominal: hip yaw, hip roll, ankle roll on each leg.
+        # Per leg the order is (hip_yaw, hip_pitch, hip_roll, knee,
+        # ankle_pitch, ankle_roll), so those are offsets 0, 2 and 5.
+        mask = np.zeros(self.mj_model.nu, dtype=np.float32)
+        per_leg = self.mj_model.nu // 2
+        for leg in range(2):
+            for off in (0, 2, 5):
+                mask[leg * per_leg + off] = 1.0
+        self.deviation_mask = jnp.array(mask)
 
         # Joint limits, read from the model rather than restated in Python.
         jnt_range = self.mj_model.jnt_range[1:]  # skip the free joint
@@ -186,6 +198,7 @@ class NadirEnv:
             step_count=jnp.array(0, dtype=jnp.int32),
             command=command,
             previous_action=prev_action,
+            previous_action_2=jnp.zeros(self.nu),
             action_buffer=action_buffer,
             gait_phase=gait_phase,
             feet_air_time=jnp.zeros(2),
@@ -242,6 +255,11 @@ class NadirEnv:
 
         foot_pos = data.geom_xpos[self.foot_geom_ids]
         sole_z = foot_pos[:, 2] - self.foot_half_height
+        # Feet expressed in the torso frame, so stance width is measured
+        # relative to the robot rather than to the world.
+        torso_pos = data.qpos[0:3]
+        foot_body = jax.vmap(lambda f: self._quat_rotate_inv(quat, f - torso_pos))(foot_pos)
+        foot_y_body = foot_body[:, 1]
         contact = sole_z < self.contact_eps
         first_contact = jnp.logical_and(contact, jnp.logical_not(s.last_contact))
         air_time = s.feet_air_time + self.dt
@@ -269,12 +287,17 @@ class NadirEnv:
             R.joint_velocity_penalty(joint_vel),
             R.joint_limit_penalty(joint_pos, self.joint_lower, self.joint_upper),
             R.feet_slip_penalty(foot_vel_xy, contact),
+            R.orientation_penalty(projected_gravity),
+            R.joint_deviation_penalty(joint_pos, self.default_pose, self.deviation_mask),
+            R.action_smoothness_penalty(action, s.previous_action, s.previous_action_2),
+            R.stance_width_penalty(foot_y_body, c.stance_half_width_m),
         ]
         weights = [
             c.tracking_lin_vel, c.tracking_yaw_vel, c.upright, c.base_height,
             c.gait_contact, c.foot_clearance, c.feet_air_time, c.alive,
             c.lin_vel_z, c.ang_vel_xy, c.action_rate,
             c.joint_vel, c.joint_limit, c.feet_slip,
+            c.orientation, c.joint_deviation, c.action_smoothness, c.stance_width,
         ]
         reward = R.total_reward(components, weights)
 
@@ -283,8 +306,12 @@ class NadirEnv:
 
         # Termination: torso past horizontal, or collapsed. Truncation: time
         # limit. Only the former is a real failure.
-        fell = projected_gravity[2] > 0.0
-        collapsed = torso_height < 0.15
+        # Terminate past ~60 degrees of tilt rather than at 90. The old bound
+        # let the policy walk while leaning hard, which scores acceptably and
+        # looks wrong; it also has nothing to do with a posture the real robot
+        # could recover from.
+        fell = projected_gravity[2] > -0.5
+        collapsed = torso_height < 0.18
         terminated = jnp.logical_or(fell, collapsed)
         truncated = step_count >= self.episode_length
         done = jnp.logical_or(terminated, truncated)
@@ -301,6 +328,7 @@ class NadirEnv:
             step_count=step_count,
             command=command,
             previous_action=action,
+            previous_action_2=s.previous_action,
             action_buffer=buf,
             gait_phase=gait_phase,
             feet_air_time=feet_air_time,

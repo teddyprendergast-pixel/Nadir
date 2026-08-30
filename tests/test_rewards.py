@@ -143,3 +143,61 @@ def test_foot_clearance_rewards_lifting_the_swing_foot():
 
 def test_total_reward_is_a_weighted_sum():
     assert R.total_reward([1.0, 2.0, 3.0], [1.0, -1.0, 0.5]) == pytest.approx(0.5)
+
+
+# --- gait naturalness -------------------------------------------------------
+
+
+def test_orientation_penalty_is_steeper_than_upright_reward_near_vertical():
+    """The reason both terms exist.
+
+    cos(tilt) is flat near upright — at 20 degrees it still pays 0.94 — so it
+    barely discourages a persistent lean. The squared horizontal projected
+    gravity is steepest exactly there.
+    """
+    def pg(tilt):
+        return np.array([np.sin(tilt), 0.0, -np.cos(tilt)])
+
+    small = np.deg2rad(10.0)
+    upright_drop = float(R.upright_reward(pg(0.0)) - R.upright_reward(pg(small)))
+    orient_rise = float(R.orientation_penalty(pg(small)) - R.orientation_penalty(pg(0.0)))
+    assert orient_rise > upright_drop
+    assert R.orientation_penalty(pg(0.0)) == pytest.approx(0.0)
+
+
+def test_joint_deviation_penalty_only_scores_masked_joints():
+    default = np.zeros(12)
+    mask = np.zeros(12); mask[[0, 2, 5, 6, 8, 11]] = 1.0
+
+    swing_joints = np.zeros(12); swing_joints[[1, 3, 4]] = 1.0   # pitch/knee
+    splayed = np.zeros(12); splayed[[0, 2]] = 1.0                # yaw/roll
+
+    # the joints that must move to make a stride are not penalised
+    assert R.joint_deviation_penalty(swing_joints, default, mask) == pytest.approx(0.0)
+    # the ones that make the legs splay are
+    assert R.joint_deviation_penalty(splayed, default, mask) > 0.0
+
+
+def test_action_smoothness_penalises_acceleration_not_velocity():
+    a = np.ones(12)
+    # constant velocity ramp: rate penalty bites, smoothness does not
+    assert R.action_smoothness_penalty(2 * a, a, 0 * a) == pytest.approx(0.0)
+    assert R.action_rate_penalty(2 * a, a) > 0.0
+    # a reversal is pure acceleration
+    assert R.action_smoothness_penalty(0 * a, a, 0 * a) > 0.0
+
+
+def test_stance_width_penalty_rewards_feet_under_the_hips():
+    hw = 0.05
+    nominal = np.array([-hw, hw])          # right foot -y, left foot +y
+    assert R.stance_width_penalty(nominal, hw) == pytest.approx(0.0)
+    # too wide, and too narrow, both cost
+    assert R.stance_width_penalty(np.array([-0.12, 0.12]), hw) > 0.0
+    assert R.stance_width_penalty(np.array([0.0, 0.0]), hw) > 0.0
+
+
+def test_stance_width_penalty_punishes_crossed_feet():
+    hw = 0.05
+    crossed = np.array([hw, -hw])          # right foot now on the left side
+    normal = np.array([-hw, hw])
+    assert R.stance_width_penalty(crossed, hw) > R.stance_width_penalty(normal, hw)
