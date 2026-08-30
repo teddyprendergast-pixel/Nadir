@@ -111,6 +111,12 @@ class NadirEnv:
         # Seeded once on CPU so reset needs no forward-kinematics call.
         self._default_foot_pos = self._compute_default_foot_pos()
 
+        # A pristine mjx.Data, built once. _reset_state runs inside the step's
+        # auto-reset branch, so building it there would re-trace make_data on
+        # every environment step and bloat the XLA graph. Closing over a
+        # concrete value makes it a graph constant instead.
+        self._empty_data = mjx.make_data(self.mjx_model)
+
     # --- setup helpers ------------------------------------------------------
 
     def _compute_default_foot_pos(self) -> jnp.ndarray:
@@ -151,8 +157,7 @@ class NadirEnv:
             k_vel, shape=(self.mjx_model.nv,), minval=-0.05, maxval=0.05
         )
 
-        data = mjx.make_data(self.mjx_model)
-        data = data.replace(qpos=qpos, qvel=qvel, ctrl=self.default_pose)
+        data = self._empty_data.replace(qpos=qpos, qvel=qvel, ctrl=self.default_pose)
 
         command = self._sample_command(k_cmd)
         prev_action = jnp.zeros(self.nu)
@@ -287,12 +292,25 @@ class NadirEnv:
             rng=rng,
         )
 
-        # Auto-reset. Both branches are evaluated under vmap, which is why
-        # _reset_state is built to be cheap.
+        # Auto-reset. Both branches are evaluated under vmap, so this has to
+        # stay cheap. Only qpos/qvel/ctrl are swapped inside mjx.Data: every
+        # other field (contacts, constraint Jacobians, derived kinematics) is
+        # recomputed from those by the next mjx.step, so selecting over the
+        # whole Data structure would burn a large `where` over the contact and
+        # constraint buffers on every single step for no effect.
         fresh = self._reset_state(k_reset)
-        next_state = jax.tree_util.tree_map(
-            lambda a, b: jnp.where(done, a, b), fresh, stepped
+
+        def _sel(a, b):
+            return jnp.where(done, a, b)
+
+        reset_data = stepped.mjx_data.replace(
+            qpos=_sel(fresh.mjx_data.qpos, stepped.mjx_data.qpos),
+            qvel=_sel(fresh.mjx_data.qvel, stepped.mjx_data.qvel),
+            ctrl=_sel(fresh.mjx_data.ctrl, stepped.mjx_data.ctrl),
+            time=_sel(fresh.mjx_data.time, stepped.mjx_data.time),
         )
+        next_state = jax.tree_util.tree_map(_sel, fresh, stepped)
+        next_state = next_state.replace(mjx_data=reset_data)
         # The transition the learner sees must carry this step's reward/done
         # and episode statistics, not the fresh episode's zeros.
         next_state = next_state.replace(
