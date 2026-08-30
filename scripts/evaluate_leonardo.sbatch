@@ -60,16 +60,23 @@ path = f"runs/{run}/metrics.csv"
 rows = list(csv.DictReader(open(path)))
 x = [float(r["env_steps"]) / 1e6 for r in rows]
 
+# episode_return is deliberately not plotted: runs launched before a7cc29f
+# carry a version that accumulates across episodes. mean_step_reward is the
+# equivalent signal and is correct in every run. See docs/audit-2026-08-30.md.
 panels = [
-    ("episode_return", "mean episode return", None),
     ("episode_length", "mean episode length (steps)", None),
-    ("termination_rate", "termination rate (fell)", (0, 1.05)),
+    ("termination_rate", "fraction of episodes ending in a fall", (0, 1.05)),
+    ("mean_step_reward", "mean reward per step", None),
     ("value_loss", "value loss", None),
 ]
 fig, axes = plt.subplots(2, 2, figsize=(11, 6.5), sharex=True)
 for ax, (key, label, ylim) in zip(axes.flat, panels):
     ax.plot(x, [float(r[key]) for r in rows], lw=1.2)
     ax.set_ylabel(label); ax.grid(alpha=0.3)
+    if key == "episode_length":
+        ax.axhline(1000, ls="--", lw=0.8, c="grey")
+        ax.annotate("20 s time limit", (x[-1], 1000), ha="right", va="bottom",
+                    fontsize=8, color="grey")
     if ylim: ax.set_ylim(*ylim)
 for ax in axes[1]:
     ax.set_xlabel("environment steps (millions)")
