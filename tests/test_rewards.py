@@ -1,34 +1,91 @@
+"""Reward-term tests.
+
+These exist because the reward that shipped in f751b86 was sign-inverted: it
+returned 0 when the robot was upright and 4 when it was inverted, with a
+positive weight. Nothing caught it, because every test in this file used to
+import a function name that did not exist and skip on ImportError.
+"""
+
+import numpy as np
 import pytest
-import jax.numpy as jnp
 
-def test_velocity_tracking_zero_error():
-    """Perfect tracking should give reward = 1.0"""
-    try:
-        from nadir.sim.rewards import track_velocity
-        target = jnp.array([1.0, 0.0, 0.0])
-        actual = jnp.array([1.0, 0.0, 0.0])
-        reward = track_velocity(actual, target)
-        assert jnp.isclose(reward, 1.0)
-    except ImportError:
-        pytest.skip("rewards module not found")
+from Nadir.sim import rewards as R
 
-def test_upright_reward():
-    """Upright orientation should give maximum reward."""
-    try:
-        from nadir.sim.rewards import upright_posture
-        proj_gravity = jnp.array([0.0, 0.0, 1.0])
-        reward = upright_posture(proj_gravity)
-        assert jnp.isclose(reward, 1.0)
-    except ImportError:
-        pytest.skip("rewards module not found")
+UPRIGHT = np.array([0.0, 0.0, -1.0])      # world down-vector in a level body frame
+HORIZONTAL = np.array([1.0, 0.0, 0.0])    # torso on its side
+INVERTED = np.array([0.0, 0.0, 1.0])      # torso upside down
 
-def test_action_rate_zero_change():
-    """No change in action should give zero penalty."""
-    try:
-        from nadir.sim.rewards import action_rate_penalty
-        last_action = jnp.zeros(10)
-        curr_action = jnp.zeros(10)
-        penalty = action_rate_penalty(last_action, curr_action)
-        assert jnp.isclose(penalty, 0.0)
-    except ImportError:
-        pytest.skip("rewards module not found")
+
+def test_upright_reward_is_maximal_when_upright():
+    assert R.upright_reward(UPRIGHT) == pytest.approx(1.0)
+
+
+def test_upright_reward_is_zero_when_horizontal_or_worse():
+    assert R.upright_reward(HORIZONTAL) == pytest.approx(0.0)
+    assert R.upright_reward(INVERTED) == pytest.approx(0.0)
+
+
+def test_upright_reward_is_monotone_in_tilt():
+    """Regression guard for the inverted sign: tilting must never pay more."""
+    tilts = np.linspace(0.0, np.pi, 25)
+    vals = [float(R.upright_reward(np.array([np.sin(t), 0.0, -np.cos(t)]))) for t in tilts]
+    assert all(a >= b - 1e-6 for a, b in zip(vals, vals[1:])), vals
+
+
+def test_velocity_tracking_peaks_at_the_commanded_velocity():
+    cmd = np.array([0.4, 0.0, 0.0])
+    perfect = R.velocity_tracking_reward(np.array([0.4, 0.0, 0.0]), cmd)
+    off = R.velocity_tracking_reward(np.array([0.0, 0.0, 0.0]), cmd)
+    wrong_way = R.velocity_tracking_reward(np.array([-0.4, 0.0, 0.0]), cmd)
+    assert perfect == pytest.approx(1.0)
+    assert perfect > off > wrong_way
+
+
+def test_yaw_tracking_peaks_at_the_commanded_rate():
+    cmd = np.array([0.0, 0.0, 0.8])
+    assert R.yaw_rate_tracking_reward(np.array([0.0, 0.0, 0.8]), cmd) == pytest.approx(1.0)
+    assert (R.yaw_rate_tracking_reward(np.array([0.0, 0.0, 0.8]), cmd)
+            > R.yaw_rate_tracking_reward(np.array([0.0, 0.0, -0.8]), cmd))
+
+
+def test_base_height_reward_peaks_at_target_and_is_reachable():
+    """The target must be a height the robot can actually stand at.
+
+    The shipped config targeted 0.32 m; the model's straight-legged maximum is
+    0.2700 m, so the term was an unbounded incentive to jump.
+    """
+    from Nadir.sim.env_mjx import NadirEnv
+
+    target = R.RewardConfig().target_height
+    assert R.base_height_reward(target, target) == pytest.approx(1.0)
+    assert target <= NadirEnv.STANDING_HEIGHT + 1e-6
+    assert target < 0.2700  # straight-legged maximum, measured from the MJCF
+
+
+def test_penalties_are_non_negative():
+    """Penalty helpers must return a cost; the weights carry the sign."""
+    assert R.action_rate_penalty(np.ones(10), np.zeros(10)) >= 0
+    assert R.joint_velocity_penalty(np.full(10, -3.0)) >= 0
+    assert R.lin_vel_z_penalty(np.array([0.0, 0.0, -2.0])) >= 0
+    assert R.ang_vel_xy_penalty(np.array([1.0, -1.0, 0.0])) >= 0
+
+
+def test_action_rate_penalty_is_zero_for_a_held_action():
+    a = np.array([0.1, -0.2, 0.3, 0.0, 0.0, 0.1, -0.2, 0.3, 0.0, 0.0])
+    assert R.action_rate_penalty(a, a) == pytest.approx(0.0)
+
+
+def test_joint_limit_penalty_only_bites_near_the_limits():
+    lower, upper = np.full(3, -1.0), np.full(3, 1.0)
+    assert R.joint_limit_penalty(np.zeros(3), lower, upper) == pytest.approx(0.0)
+    assert R.joint_limit_penalty(np.full(3, 0.999), lower, upper) > 0.0
+
+
+def test_feet_air_time_pays_only_on_touchdown():
+    air = np.array([0.4, 0.4])
+    assert R.feet_air_time_reward(air, np.array([0.0, 0.0])) == pytest.approx(0.0)
+    assert R.feet_air_time_reward(air, np.array([1.0, 0.0])) > 0.0
+
+
+def test_total_reward_is_a_weighted_sum():
+    assert R.total_reward([1.0, 2.0, 3.0], [1.0, -1.0, 0.5]) == pytest.approx(0.5)
