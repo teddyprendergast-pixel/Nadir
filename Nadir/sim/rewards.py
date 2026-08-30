@@ -36,6 +36,7 @@ class RewardConfig:
     tracking_sigma: float = 0.25
     gait_period_s: float = 0.6      # one full left-right cycle
     swing_height_m: float = 0.03    # target sole clearance mid-swing
+    move_cmd_threshold: float = 0.05  # |command| below this means 'stand still'
     # Measured from the MJCF by forward kinematics: the torso origin height
     # with DEFAULT_POSE and the soles on the floor. Must stay <= the model's
     # straight-legged maximum of 0.2700 m, or this term becomes a permanent
@@ -80,7 +81,7 @@ def base_height_reward(base_height, target_height=0.2577):
     return jnp.exp(-40.0 * jnp.square(base_height - target_height))
 
 
-def gait_contact_reward(contact, phase):
+def gait_contact_reward(contact, phase, moving=1.0):
     """Reward matching an alternating left/right contact schedule.
 
     The environment already feeds the policy a gait-phase clock in its
@@ -88,14 +89,21 @@ def gait_contact_reward(contact, phase):
     clock and no reason to use it, and settled into a flat-footed shuffle.
     This closes that loop: the right foot should be in stance for the first
     half of the cycle and the left foot for the second.
+
+    `moving` gates the term on command magnitude. Applied unconditionally it
+    pays the robot to march on the spot when told to stand still — measured
+    at 49M steps as standing path length rising from 0.52 m to 1.19 m. A
+    stationary command should reward *both* feet planted instead.
     """
     desired_stance_r = phase < 0.5
     desired_stance_l = jnp.logical_not(desired_stance_r)
-    desired = jnp.stack([desired_stance_r, desired_stance_l]).reshape(2)
+    stepping = jnp.stack([desired_stance_r, desired_stance_l]).reshape(2)
+    planted = jnp.ones(2, dtype=bool)
+    desired = jnp.where(moving > 0.5, stepping, planted)
     return jnp.mean((contact == desired).astype(jnp.float32))
 
 
-def foot_clearance_reward(sole_height, phase, target=0.03, sigma=0.02):
+def foot_clearance_reward(sole_height, phase, target=0.03, sigma=0.02, moving=1.0):
     """Reward the *swing* foot lifting to a target height.
 
     Without this the cheapest way to satisfy the contact schedule is to barely
@@ -105,7 +113,9 @@ def foot_clearance_reward(sole_height, phase, target=0.03, sigma=0.02):
     swing_r = phase >= 0.5
     swing = jnp.stack([swing_r, jnp.logical_not(swing_r)]).reshape(2)
     close = jnp.exp(-jnp.square((sole_height - target) / sigma))
-    return jnp.mean(close * swing.astype(jnp.float32))
+    # Gated like gait_contact_reward: no reason to lift a foot when the
+    # command is to stand still.
+    return jnp.mean(close * swing.astype(jnp.float32)) * jnp.clip(moving, 0.0, 1.0)
 
 
 def feet_air_time_reward(air_time, first_contact, target=0.25):

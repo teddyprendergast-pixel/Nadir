@@ -247,14 +247,20 @@ class NadirEnv:
         air_time = s.feet_air_time + self.dt
         foot_vel_xy = (foot_pos[:, :2] - s.last_foot_pos[:, :2]) / self.dt
 
+        # Is this a locomotion command or a "stand still" command? The gait
+        # terms are gated on this so the robot is not paid to march in place.
+        moving = (jnp.linalg.norm(command) > self.reward_config.move_cmd_threshold
+                  ).astype(jnp.float32)
+
         c = self.reward_config
         components = [
             R.velocity_tracking_reward(base_lin_vel_b, command, c.tracking_sigma),
             R.yaw_rate_tracking_reward(base_ang_vel_b, command, c.tracking_sigma),
             R.upright_reward(projected_gravity),
             R.base_height_reward(torso_height, c.target_height),
-            R.gait_contact_reward(contact, gait_phase[0]),
-            R.foot_clearance_reward(sole_z, gait_phase[0], c.swing_height_m),
+            R.gait_contact_reward(contact, gait_phase[0], moving),
+            R.foot_clearance_reward(sole_z, gait_phase[0], c.swing_height_m,
+                                    moving=moving),
             R.feet_air_time_reward(air_time, first_contact, c.air_time_target),
             R.alive_reward(),
             R.lin_vel_z_penalty(base_lin_vel_b),

@@ -103,6 +103,30 @@ def test_gait_contact_rewards_alternating_stance():
     assert R.gait_contact_reward(both_down, 0.25) == pytest.approx(0.5)
 
 
+def test_gait_rewards_are_gated_on_a_movement_command():
+    """A robot told to stand still must not be paid to march on the spot.
+
+    Applied unconditionally, the gait terms raised standing path length from
+    0.52 m to 1.19 m at 49M steps — the policy stepped in place because that
+    is what the contact schedule rewarded.
+    """
+    both_down = np.array([True, True])
+    r_down_l_up = np.array([True, False])
+
+    # moving: alternating stance is what scores
+    assert R.gait_contact_reward(r_down_l_up, 0.25, moving=1.0) == pytest.approx(1.0)
+    assert R.gait_contact_reward(both_down, 0.25, moving=1.0) == pytest.approx(0.5)
+
+    # standing: both feet planted is what scores, stepping is penalised
+    assert R.gait_contact_reward(both_down, 0.25, moving=0.0) == pytest.approx(1.0)
+    assert R.gait_contact_reward(r_down_l_up, 0.25, moving=0.0) == pytest.approx(0.5)
+
+    # and there is no reward for lifting a foot while standing
+    assert R.foot_clearance_reward(
+        np.array([0.0, 0.03]), 0.25, 0.03, moving=0.0
+    ) == pytest.approx(0.0)
+
+
 def test_foot_clearance_rewards_lifting_the_swing_foot():
     target = 0.03
     # phase < 0.5 -> left foot is swinging
