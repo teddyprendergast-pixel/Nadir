@@ -26,6 +26,16 @@ class PPOConfig:
     max_grad_norm: float = 1.0
     normalize_advantage: bool = True
 
+    # KL-adaptive learning rate. A fixed 3e-4 let the clip fraction reach 0.39
+    # by 49M steps in run leonardo-300M (healthy PPO sits at 0.1-0.2), i.e. the
+    # policy was stepping well outside its own trust region. This is the same
+    # controller rsl_rl / legged_gym use: shrink the step when the measured KL
+    # runs hot, grow it when there is headroom.
+    adaptive_lr: bool = True
+    target_kl: float = 0.01
+    lr_min: float = 1e-5
+    lr_max: float = 1e-2
+
     # Training
     total_timesteps: int = 300_000_000
     seed: int = 42

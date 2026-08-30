@@ -51,10 +51,40 @@ class PPOTrainer:
         self.env = env
         self.actor_critic = actor_critic
 
+        # inject_hyperparams puts the learning rate *inside* the optimiser
+        # state, so it can be adjusted under jit between epochs.
         self.optimizer = optax.chain(
             optax.clip_by_global_norm(config.max_grad_norm),
-            optax.adam(learning_rate=config.learning_rate, eps=1e-5),
+            optax.inject_hyperparams(optax.adam)(
+                learning_rate=config.learning_rate, eps=1e-5
+            ),
         )
+
+    @staticmethod
+    def _get_lr(opt_state):
+        return opt_state[1].hyperparams["learning_rate"]
+
+    def _set_lr(self, opt_state, lr):
+        inject = opt_state[1]
+        hp = dict(inject.hyperparams)
+        hp["learning_rate"] = lr
+        return (opt_state[0], inject._replace(hyperparams=hp)) + tuple(opt_state[2:])
+
+    def _adapt_lr(self, opt_state, approx_kl):
+        """rsl_rl's KL controller: shrink the step when KL runs hot.
+
+        Applied once per epoch on that epoch's mean KL. Multiplicative rather
+        than a fixed schedule, so it responds to how hard the current stage of
+        training actually is instead of to wall-clock progress.
+        """
+        if not getattr(self.config, "adaptive_lr", False):
+            return opt_state
+        target = self.config.target_kl
+        lr = self._get_lr(opt_state)
+        lr = jnp.where(approx_kl > 2.0 * target, lr / 1.5, lr)
+        lr = jnp.where(approx_kl < 0.5 * target, lr * 1.5, lr)
+        lr = jnp.clip(lr, self.config.lr_min, self.config.lr_max)
+        return self._set_lr(opt_state, lr)
 
     def compute_gae(self, transitions: Transition, last_value: jnp.ndarray):
         def _get_advantages(carry, transition):
@@ -161,6 +191,8 @@ class PPOTrainer:
                 (params, opt_state),
                 jnp.arange(self.config.num_minibatches),
             )
+            # metrics = (loss, policy_loss, value_loss, entropy, kl, clip_frac)
+            opt_state = self._adapt_lr(opt_state, metrics[4].mean())
             return (params, opt_state, rng), metrics
 
         (new_params, new_opt_state, new_rng), epoch_metrics = jax.lax.scan(
@@ -181,6 +213,7 @@ class PPOTrainer:
 
         names = ["loss", "policy_loss", "value_loss", "entropy", "approx_kl", "clip_frac"]
         avg_metrics = {n: m.mean() for n, m in zip(names, epoch_metrics)}
+        avg_metrics["learning_rate"] = self._get_lr(new_opt_state)
         return new_runner_state, avg_metrics
 
     @partial(jax.jit, static_argnums=(0,))

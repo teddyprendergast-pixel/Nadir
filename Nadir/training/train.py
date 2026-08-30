@@ -30,7 +30,7 @@ METRIC_FIELDS = [
     "update", "env_steps", "wall_time_s", "sps",
     "episode_return", "episode_length", "episodes_finished", "termination_rate",
     "mean_step_reward", "loss", "policy_loss", "value_loss", "entropy",
-    "approx_kl", "clip_frac",
+    "approx_kl", "clip_frac", "learning_rate",
 ]
 
 
@@ -143,6 +143,7 @@ def main():
                 f"ret={m['episode_return']:8.2f} len={m['episode_length']:7.1f} "
                 f"term={m['termination_rate']:.2f} "
                 f"vloss={m['value_loss']:8.3f} kl={m['approx_kl']:.4f} "
+                f"clip={m['clip_frac']:.2f} lr={m['learning_rate']:.2e} "
                 f"sps={row['sps']:,}",
                 flush=True,
             )
