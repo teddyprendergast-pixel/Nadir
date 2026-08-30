@@ -7,7 +7,7 @@ import time
 def main():
     parser = argparse.ArgumentParser(description="Nadir Simulation Viewer")
     parser.add_argument('--policy', type=str, default=None, help="Path to ONNX policy file")
-    parser.add_argument('--xml', type=str, default='nadir/sim/nadir.xml', help="Path to MJCF xml")
+    parser.add_argument('--xml', type=str, default='Nadir/sim/nadir.xml', help="Path to MJCF xml")
     args = parser.parse_args()
     
     print(f"Loading model: {args.xml}")
