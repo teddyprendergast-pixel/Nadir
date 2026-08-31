@@ -24,7 +24,10 @@
 
 set -euo pipefail
 
-REPO=/leonardo_scratch/large/userexternal/rdionisi/fun/Nadir
+# Overridable so an old checkpoint can be evaluated against the code it was
+# trained with, via `git worktree add <path> <commit>`. A 10-DOF policy cannot
+# be loaded by the 12-DOF network.
+REPO="${NADIR_REPO:-/leonardo_scratch/large/userexternal/rdionisi/fun/Nadir}"
 VENV=/leonardo_scratch/large/userexternal/rdionisi/fun/nadir-venv
 RUN="${NADIR_RUN:?set NADIR_RUN to the run directory name under runs/}"
 # Default to `best`, but allow pointing at a specific update_N. Prefer a

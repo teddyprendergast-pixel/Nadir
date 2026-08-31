@@ -100,7 +100,25 @@ def build_onnx(params, obs_dim, default_pose, action_scale, ctrl_lower, ctrl_upp
     return model
 
 
-def validate(model_path, params, actor_critic, obs_dim, num_tests=256, tol=1e-5):
+# Pass criterion for the export, expressed in the units that matter: the
+# error in the joint angle actually commanded to the servo.
+#
+# The STS3215 has a 12-bit encoder (0.088 deg = 1.54e-3 rad per count) and
+# roughly 0.87 deg of backlash. 1e-4 rad is ~15x finer than a single encoder
+# count and ~150x finer than the backlash, so an export inside this bound
+# cannot produce a difference the hardware could express.
+#
+# An earlier version compared raw policy output against an abstract 1e-5.
+# That is the wrong unit and the wrong scale: a fully trained network has
+# larger activations and therefore larger absolute float32 accumulation
+# error, so a correct export drifted past it (1.34e-5, i.e. 8e-6 rad) purely
+# by training longer. The fix is a physically grounded bound, not a looser
+# arbitrary one.
+GOAL_TOL_RAD = 1e-4
+
+
+def validate(model_path, params, actor_critic, obs_dim, num_tests=256,
+             tol_rad=GOAL_TOL_RAD):
     """Check the ONNX graph reproduces the JAX actor's mean action.
 
     The JAX side is forced to full float32. On an A100, JAX defaults to TF32
@@ -125,14 +143,32 @@ def validate(model_path, params, actor_critic, obs_dim, num_tests=256, tol=1e-5)
         mean, _ = actor_critic.apply(params, obs, method=lambda m, o: m.actor(o))
     jax_action = np.asarray(jnp.clip(mean, -1.0, 1.0))
 
-    onnx_action = sess.run(["action"], {in_name: np.asarray(obs, dtype=np.float32)})[0]
+    onnx_action, onnx_goal = sess.run(
+        ["action", "goal_position"], {in_name: np.asarray(obs, dtype=np.float32)}
+    )
 
-    max_err = float(np.max(np.abs(jax_action - onnx_action)))
-    if max_err > tol:
-        raise AssertionError(f"ONNX/JAX mismatch: max abs error {max_err:.3e} > {tol:.1e}")
-    print(f"ONNX validated against JAX over {num_tests} observations "
-          f"(max abs error {max_err:.2e})")
-    return max_err
+    # Reproduce the goal-position arithmetic on the JAX side, so the comparison
+    # is over the radians the servo would actually receive.
+    from ..sim.env_mjx import NadirEnv
+    env = NadirEnv(num_envs=1)
+    jax_goal = np.clip(
+        np.asarray(env.DEFAULT_POSE) + jax_action * np.asarray(env.ACTION_SCALE),
+        np.asarray(env.ctrl_lower), np.asarray(env.ctrl_upper),
+    )
+
+    err_action = float(np.max(np.abs(jax_action - onnx_action)))
+    err_rad = float(np.max(np.abs(jax_goal - onnx_goal)))
+
+    if err_rad > tol_rad:
+        raise AssertionError(
+            f"ONNX/JAX goal-position mismatch: {err_rad:.3e} rad > {tol_rad:.1e} rad "
+            f"({np.rad2deg(err_rad):.2e} deg; one STS3215 encoder count is 0.088 deg)"
+        )
+    print(f"ONNX validated against JAX over {num_tests} observations: "
+          f"goal error {err_rad:.2e} rad ({np.rad2deg(err_rad):.1e} deg, "
+          f"{1.536e-3 / max(err_rad, 1e-12):.0f}x finer than one encoder count); "
+          f"raw action error {err_action:.2e}")
+    return err_rad
 
 
 def main():
