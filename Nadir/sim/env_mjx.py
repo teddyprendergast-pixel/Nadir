@@ -96,13 +96,21 @@ class NadirEnv:
         self.reward_config = R.RewardConfig()
         self.gait_period = self.reward_config.gait_period_s
 
-        # Joints held near nominal: hip yaw, hip roll, ankle roll on each leg.
+        # Joints held near nominal: hip ROLL and ankle roll on each leg.
         # Per leg the order is (hip_yaw, hip_pitch, hip_roll, knee,
-        # ankle_pitch, ankle_roll), so those are offsets 0, 2 and 5.
+        # ankle_pitch, ankle_roll), so those are offsets 2 and 5.
+        #
+        # hip_yaw (offset 0) is deliberately NOT in this mask. An earlier
+        # version included it, which penalised the policy for using the exact
+        # joint that was added to make steering possible. Measured effect at
+        # 400M steps: the 0.5 m/s walk netted 0.73 m out of 9.22 m walked —
+        # it circled — and yaw tracking fell from 0.303 to 0.102 rad/s against
+        # a 0.80 command. hip_pitch, knee and ankle_pitch are excluded for the
+        # same reason: they must move freely to produce a stride.
         mask = np.zeros(self.mj_model.nu, dtype=np.float32)
         per_leg = self.mj_model.nu // 2
         for leg in range(2):
-            for off in (0, 2, 5):
+            for off in (2, 5):
                 mask[leg * per_leg + off] = 1.0
         self.deviation_mask = jnp.array(mask)
 

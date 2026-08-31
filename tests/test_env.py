@@ -228,3 +228,25 @@ def test_commands_are_resampled_during_an_episode(env):
     the policy was never actually velocity-conditioned."""
     assert env.command_resample_steps > 0
     assert env.command_resample_steps < env.episode_length
+
+
+def test_hip_yaw_is_not_penalised_for_deviating(env):
+    """hip_yaw must stay out of the joint-deviation mask.
+
+    It is the only joint that can steer the robot. Penalising it towards
+    nominal fights the purpose it was added for: with hip_yaw masked, the
+    0.5 m/s walk netted 0.73 m out of 9.22 m walked (it circled) and yaw
+    tracking dropped from 0.303 to 0.102 rad/s against a 0.80 command.
+    """
+    import mujoco
+
+    mask = np.asarray(env.deviation_mask)
+    for i in range(env.nu):
+        name = mujoco.mj_id2name(env.mj_model, mujoco.mjtObj.mjOBJ_JOINT, i + 1)
+        if "hip_yaw" in name:
+            assert mask[i] == 0.0, f"{name} must not be pulled towards nominal"
+        # the joints that generate the stride must also be free
+        if any(k in name for k in ("hip_pitch", "knee", "ankle_pitch")):
+            assert mask[i] == 0.0, f"{name} must be free to swing"
+    # but the roll joints, which cause splaying, are constrained
+    assert mask.sum() == 4, "expected hip_roll and ankle_roll on both legs"
