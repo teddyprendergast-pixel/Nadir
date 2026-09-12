@@ -1,4 +1,11 @@
 import os
+
+if "XLA_FLAGS" not in os.environ:
+    num_threads = str(os.cpu_count() or 20)
+    os.environ["XLA_FLAGS"] = f"--xla_cpu_multi_thread_eigen=true intra_op_parallelism_threads={num_threads}"
+if "OMP_NUM_THREADS" not in os.environ:
+    os.environ["OMP_NUM_THREADS"] = str(os.cpu_count() or 20)
+
 import argparse
 import jax
 import jax.numpy as jnp
@@ -26,6 +33,7 @@ def main():
     parser.add_argument("--num-steps", type=int, default=24, help="Number of steps per rollout")
     parser.add_argument("--total-timesteps", type=int, default=100_000_000, help="Total training timesteps")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--log-interval", type=int, default=10, help="Log every N updates")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Directory to save checkpoints")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
@@ -36,6 +44,7 @@ def main():
         num_steps=args.num_steps,
         total_timesteps=args.total_timesteps,
         seed=args.seed,
+        log_interval=args.log_interval,
         checkpoint_dir=args.checkpoint_dir
     )
     env_config = EnvConfig(num_envs=args.num_envs)
@@ -87,14 +96,22 @@ def main():
     print(f"Starting training for {num_updates} updates...")
     
     # Wrap train step with lax.scan across total updates (could batch this if needed)
+    import time
     for update in tqdm(range(1, num_updates + 1), desc="Training", unit="update"):
+        update_start_time = time.time()
         runner_state, metrics = trainer.train_step(runner_state, None)
         
+        # Block until computation is complete to get accurate timing
+        metrics['reward_sum'].block_until_ready()
+        update_time = time.time() - update_start_time
+        
         if update % ppo_config.log_interval == 0:
+            sps = (ppo_config.num_steps * ppo_config.num_envs) / update_time if update_time > 0 else 0
             tprint(f"Update: {update}/{num_updates}")
             tprint(f"Reward Sum: {metrics['reward_sum']:.2f}")
             tprint(f"Policy Loss: {metrics['policy_loss']:.4f}")
             tprint(f"Value Loss: {metrics['value_loss']:.4f}")
+            tprint(f"SPS: {sps:.0f}")
             tprint("-" * 30)
             
         if update % ppo_config.save_interval == 0:
