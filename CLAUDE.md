@@ -14,9 +14,8 @@ happen again.
 ## What this is
 
 A desktop-scale bipedal walking robot, ~30–40 cm tall, ~1.5 kg, on a student
-budget of ~€700. A fork-in-spirit of
-[Open Duck Mini V2](https://github.com/apirrone/Open_Duck_Mini) — we inherit
-its stack rather than reimplement it.
+budget of ~€700, pairing a 50 Hz Reinforcement Learning balance loop with
+edge spatial AI.
 
 ## Non-negotiables
 
@@ -68,7 +67,7 @@ Currently **Phase 0 → 1**.
 
 | Phase | Goal |
 | :--- | :--- |
-| 0 | Reproduce upstream sim training on the cluster. No hardware purchased. |
+| 0 | Validate baseline sim training on the cluster. No hardware purchased. |
 | 1 | Pi + IMU + 2 servos. Deterministic 50 Hz loop. **Actuator system-ID.** |
 | 2 | Print structure, one full leg, match MJCF to measured reality. |
 | 3 | Full assembly, tethered walking, then unsupported steps. |
@@ -77,17 +76,12 @@ Currently **Phase 0 → 1**.
 Do not build for a later phase during an earlier one. Vision code, in
 particular, is out of scope until Phase 4.
 
-## Upstream
+## Modules & Architecture
 
-`upstream/runtime` is a pinned submodule of
-[`Open_Duck_Mini_Runtime`](https://github.com/apirrone/Open_Duck_Mini_Runtime)
-(branch `v2`) — the Pi-side servo bus driver and real-time loop. **Do not
-reimplement what lives there.** Read it before writing anything that talks to
-a servo.
-
-Other upstream repos (`Open_Duck_Playground` for MJX training,
-`Open_Duck_reference_motion_generator`) are listed in the README with how each
-is intended to be consumed.
+- **`nadir/deploy/`**: Pi-side servo bus driver (`servo_bus.py`), IMU reading, and deterministic 50 Hz real-time control loop (`control_loop.py`).
+- **`nadir/sim/` & `nadir/training/`**: MuJoCo MJX parallel simulation, kinematic reference motions, and PPO training stack.
+- **`nadir/navigation/`**: Asynchronous 2.5D elevation costmap and local path planning.
+- **`nadir/biodiversity/`**: Edge bioacoustic audio analysis and flora vision classification.
 
 ## Conventions
 

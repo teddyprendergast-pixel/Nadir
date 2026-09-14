@@ -1,7 +1,11 @@
 <mujoco model="nadir">
   <compiler angle="radian" meshdir="meshes/" />
   
-  <option timestep="0.002" iterations="50" solver="Newton" tolerance="1e-10" />
+  <option timestep="0.002" iterations="50" solver="CG" tolerance="1e-4" />
+  
+  <default>
+    <joint damping="0.1" armature="0.001" />
+  </default>
 
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="512" />
@@ -88,4 +92,10 @@
     <touch name="touch_foot_r" site="foot_contact_r" />
     <touch name="touch_foot_l" site="foot_contact_l" />
   </sensor>
+  <contact>
+    <exclude body1="torso" body2="upper_leg_r" />
+    <exclude body1="torso" body2="upper_leg_l" />
+    <exclude body1="torso" body2="hip_bracket_r" />
+    <exclude body1="torso" body2="hip_bracket_l" />
+  </contact>
 </mujoco>

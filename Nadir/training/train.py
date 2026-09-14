@@ -1,4 +1,12 @@
 import os
+import sys
+
+# Auto-relaunch using the project's virtual environment if invoked with a different Python
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+venv_python = os.path.join(repo_root, ".venv", "Scripts", "python.exe")
+if os.path.exists(venv_python) and os.path.abspath(sys.executable).lower() != os.path.abspath(venv_python).lower():
+    import subprocess
+    sys.exit(subprocess.call([venv_python] + sys.argv))
 
 if "XLA_FLAGS" not in os.environ:
     num_threads = str(os.cpu_count() or 20)
@@ -22,9 +30,18 @@ except ImportError:
         return iterable
     tprint = print
 
-from .config import PPOConfig, EnvConfig
-from .networks import create_actor_critic
-from .ppo import PPOTrainer, RunnerState
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+try:
+    from .config import PPOConfig, EnvConfig
+    from .networks import create_actor_critic
+    from .ppo import PPOTrainer, RunnerState
+except ImportError:
+    from nadir.training.config import PPOConfig, EnvConfig
+    from nadir.training.networks import create_actor_critic
+    from nadir.training.ppo import PPOTrainer, RunnerState
+
 from nadir.sim.env_mjx import NadirEnv
 
 def main():
@@ -121,6 +138,12 @@ def main():
                 'opt_state': runner_state.opt_state
             })
             tprint(f"Saved checkpoint to {ckpt_path}")
+
+    try:
+        checkpointer.wait_until_finished()
+        checkpointer.close()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()

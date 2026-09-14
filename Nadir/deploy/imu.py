@@ -51,7 +51,7 @@ class BNO085Reader(IMUReader):
         return projected_gravity, angular_velocity
 
 class BNO055Reader(IMUReader):
-    """Adafruit BNO055 via I2C (upstream compatible)."""
+    """Adafruit BNO055 via I2C interface."""
     def __init__(self, i2c_bus: int = 1, address: int = 0x28):
         import board
         import busio

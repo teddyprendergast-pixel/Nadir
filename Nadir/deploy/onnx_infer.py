@@ -3,9 +3,9 @@ import onnxruntime as ort
 from typing import Optional
 
 class PolicyInference:
-    """Loads and runs the trained ONNX locomotion policy at 50 Hz."""
+    """Loads and runs the trained ONNX locomotion policy at 50 Hz with action smoothing."""
     
-    def __init__(self, model_path: str, num_joints: int = 10):
+    def __init__(self, model_path: str, num_joints: int = 10, filter_alpha: float = 0.7):
         # Load ONNX model with optimizations for ARM
         sess_options = ort.SessionOptions()
         sess_options.inter_op_num_threads = 1
@@ -16,8 +16,10 @@ class PolicyInference:
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
         
-        # State
+        # State & Smoothing
+        self.filter_alpha = filter_alpha  # 0.7 = 70% new action, 30% previous action
         self.previous_action = np.zeros(num_joints, dtype=np.float32)
+        self.smoothed_action = np.zeros(num_joints, dtype=np.float32)
         self.gait_phase = 0.0
         self.gait_frequency = 1.5  # Hz
         self.num_joints = num_joints
@@ -39,23 +41,27 @@ class PolicyInference:
             angular_velocity,                                     # 3
             joint_positions - self.default_positions,              # 10
             joint_velocities * 0.05,                              # 10
-            self.previous_action,                                 # 10
+            self.smoothed_action,                                 # 10 (Filtered for smooth feedback)
             command,                                              # 3
             phase_signal,                                         # 2
         ]).astype(np.float32)
         return obs
     
     def predict(self, observation: np.ndarray, dt: float = 0.02) -> np.ndarray:
-        """Run policy inference. Returns target joint positions in radians."""
+        """Run policy inference and apply Exponential Low-Pass Filtering for fluid walking."""
         obs_batch = observation.reshape(1, -1)
         raw_action = self.session.run([self.output_name], {self.input_name: obs_batch})[0][0]
-        action = np.clip(raw_action, -1.0, 1.0)
+        clipped_action = np.clip(raw_action, -1.0, 1.0)
+        
+        # Low-pass filter to eliminate micro-chatter / high-frequency jitter
+        self.smoothed_action = (self.filter_alpha * clipped_action + 
+                                (1.0 - self.filter_alpha) * self.smoothed_action)
         
         # Convert to target positions
-        target_positions = self.default_positions + action * self.action_scale
+        target_positions = self.default_positions + self.smoothed_action * self.action_scale
         
         # Update state
-        self.previous_action = action.copy()
+        self.previous_action = clipped_action.copy()
         self.gait_phase = (self.gait_phase + self.gait_frequency * dt) % 1.0
         
         return target_positions
