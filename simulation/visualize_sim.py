@@ -180,7 +180,7 @@ def main():
     parser = argparse.ArgumentParser(description="Nadir 3D Simulation & Policy Visualizer")
     parser.add_argument('--policy', type=str, default=None,
                         help="Path to an ONNX policy file (e.g. exported_models/nadir_policy.onnx). If omitted, robot stands in place.")
-    parser.add_argument('--xml', type=str, default='nadir/sim/nadir.xml',
+    parser.add_argument('--xml', type=str, default='hardware/nadir.xml',
                         help="Path to the MuJoCo robot model XML file (describes robot 3D shapes, motors, and joints)")
     parser.add_argument('--vx', type=float, default=0.5,
                         help="Desired forward walking speed in meters/second (default: 0.5 m/s)")

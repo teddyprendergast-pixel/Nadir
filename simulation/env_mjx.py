@@ -27,7 +27,7 @@ class NadirEnv:
         self.num_envs = num_envs
         self.config = config or {}
         
-        xml_path = os.path.join(os.path.dirname(__file__), "nadir.xml")
+        xml_path = os.path.join(os.path.dirname(__file__), "..", "hardware", "nadir.xml")
         self.mj_model = mujoco.MjModel.from_xml_path(xml_path)
         # Configure timing and solver
         self.decimation = self.config.get("decimation", 5)  # 5 physics steps per policy step

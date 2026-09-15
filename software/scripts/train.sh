@@ -12,7 +12,7 @@ source ~/.bashrc
 conda activate nadir
 
 # Run training
-python -m nadir.training.train \
+python -m software.training.train \
     --num-envs 4096 \
     --total-timesteps 100000000 \
     --seed 42 \

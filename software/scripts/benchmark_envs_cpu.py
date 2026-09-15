@@ -84,7 +84,7 @@ def run_benchmark(num_devices: int = 16, env_counts: list = None):
             python_exe,
             "-u",
             "-m",
-            "nadir.training.train_cpu",
+            "software.training.train_cpu",
             "--num-devices", str(num_devices),
             "--num-envs", str(num_envs),
             "--num-minibatches", "4",

@@ -1,10 +1,10 @@
 import numpy as np
 from typing import Tuple, Optional
-from nadir.vision.depth_provider import DepthProvider
-from nadir.vision.traversability import TraversabilityConfig, compute_traversability_grid, depth_to_pointcloud, compute_upper_clearance
-from nadir.navigation.costmap import LocalCostmap, CostmapConfig
-from nadir.navigation.planner import fast_marching_planner, extract_velocity_command
-from nadir.navigation.corridor_refinement import CorridorRefiner
+from software.vision.depth_provider import DepthProvider
+from software.vision.traversability import TraversabilityConfig, compute_traversability_grid, depth_to_pointcloud, compute_upper_clearance
+from software.navigation.costmap import LocalCostmap, CostmapConfig
+from software.navigation.planner import fast_marching_planner, extract_velocity_command
+from software.navigation.corridor_refinement import CorridorRefiner
 
 class Navigator:
     """High-level navigation: Goal → velocity commands for the locomotion policy.

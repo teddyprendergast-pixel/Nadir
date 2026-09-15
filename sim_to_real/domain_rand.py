@@ -17,7 +17,7 @@ class DomainRandParams:
 
 def load_hardware_config():
     """Reads actuator measured ranges if available."""
-    config_path = os.path.join(os.path.dirname(__file__), "../../hardware/measured/actuators.yaml")
+    config_path = os.path.join(os.path.dirname(__file__), "..", "hardware", "measured", "actuators.yaml")
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             return yaml.safe_load(f)

@@ -32,9 +32,9 @@ import argparse
 from typing import Optional
 
 # Internal hardware drivers and neural network inference engine
-from nadir.deploy.servo_bus import STS3215Bus
-from nadir.deploy.imu import IMUReader, BNO085Reader, BNO055Reader
-from nadir.deploy.onnx_infer import PolicyInference
+from real.servo_bus import STS3215Bus
+from real.imu import IMUReader, BNO085Reader, BNO055Reader
+from real.onnx_infer import PolicyInference
 
 
 class ControlLoop:

@@ -2,7 +2,7 @@ import time
 import threading
 import numpy as np
 from typing import Tuple, Optional
-from nadir.biodiversity.logger import BiodiversityLogger
+from software.biodiversity.logger import BiodiversityLogger
 
 class BioacousticSurveyor:
     """Idea C: Onboard Bioacoustic Wildlife Surveying (~300 MB RAM).

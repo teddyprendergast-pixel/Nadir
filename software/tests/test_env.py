@@ -1,13 +1,14 @@
 import pytest
 import numpy as np
+import jax
+import jax.numpy as jnp
 
 def test_mjcf_loads():
     """Verify the MJCF model loads without error."""
     import mujoco
     import os
     
-    # Use a dummy XML if nadir.xml doesn't exist yet for test to pass structurally
-    xml_path = 'nadir/sim/nadir.xml'
+    xml_path = 'hardware/nadir.xml'
     if not os.path.exists(xml_path):
         pytest.skip(f"{xml_path} not found")
         
@@ -17,40 +18,34 @@ def test_mjcf_loads():
 
 def test_env_reset():
     """Verify reset returns valid observation shape."""
-    # Placeholder structure, requires actual Env class
-    try:
-        from nadir.sim.env import NadirEnv
-        env = NadirEnv()
-        obs = env.reset()
-        assert obs.shape == (41,)
-    except ImportError:
-        pytest.skip("NadirEnv not implemented yet")
+    from simulation.env_mjx import NadirEnv
+    env = NadirEnv(num_envs=1)
+    rng = jax.random.PRNGKey(0)
+    state, obs, priv_obs = env.reset(jax.random.split(rng, 1))
+    assert obs.shape == (1, 41)
+    assert priv_obs.shape == (1, 98)
 
 def test_env_step_zero_action():
     """Verify stepping with zero action doesn't crash."""
-    try:
-        from nadir.sim.env import NadirEnv
-        env = NadirEnv()
-        env.reset()
-        obs, reward, done, info = env.step(np.zeros(10))
-        assert obs.shape == (41,)
-        assert isinstance(reward, float)
-        assert isinstance(done, bool)
-    except ImportError:
-        pytest.skip("NadirEnv not implemented yet")
+    from simulation.env_mjx import NadirEnv
+    env = NadirEnv(num_envs=1)
+    rng = jax.random.PRNGKey(0)
+    rng, rng_step = jax.random.split(rng)
+    state, obs, priv_obs = env.reset(jax.random.split(rng, 1))
+    action = jnp.zeros((1, 10))
+    next_state, next_obs, next_priv_obs, reward, done = env.step(jax.random.split(rng_step, 1), state, action)
+    assert next_obs.shape == (1, 41)
+    assert reward.shape == (1,)
 
 def test_position_actuators():
     """Verify actuators are position-controlled, not torque."""
     import mujoco
     import os
     
-    xml_path = 'nadir/sim/nadir.xml'
+    xml_path = 'hardware/nadir.xml'
     if not os.path.exists(xml_path):
         pytest.skip(f"{xml_path} not found")
         
     model = mujoco.MjModel.from_xml_path(xml_path)
-    # Check all actuators use position control
     for i in range(model.nu):
-        # bias_type 1 is position control in MuJoCo MJCF
-        # 0 is usually none/motor
         assert model.actuator_biastype[i] != 0, f"Actuator {i} is not position-controlled"

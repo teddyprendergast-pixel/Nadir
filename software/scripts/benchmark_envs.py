@@ -37,7 +37,7 @@ def run_benchmark():
         cmd = [
             python_exe,
             "-m",
-            "nadir.training.train",
+            "software.training.train",
             "--num-envs", str(num_envs),
             "--total-timesteps", str(total_timesteps),
             "--log-interval", "1"

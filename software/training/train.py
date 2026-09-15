@@ -38,11 +38,11 @@ try:
     from .networks import create_actor_critic
     from .ppo import PPOTrainer, RunnerState
 except ImportError:
-    from nadir.training.config import PPOConfig, EnvConfig
-    from nadir.training.networks import create_actor_critic
-    from nadir.training.ppo import PPOTrainer, RunnerState
+    from software.training.config import PPOConfig, EnvConfig
+    from software.training.networks import create_actor_critic
+    from software.training.ppo import PPOTrainer, RunnerState
 
-from nadir.sim.env_mjx import NadirEnv
+from simulation.env_mjx import NadirEnv
 
 def main():
     parser = argparse.ArgumentParser(description="Train Nadir bipedal robot policy")

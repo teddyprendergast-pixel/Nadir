@@ -2,7 +2,7 @@ import time
 import threading
 import numpy as np
 from typing import Tuple, Optional
-from nadir.biodiversity.logger import BiodiversityLogger
+from software.biodiversity.logger import BiodiversityLogger
 
 class PlantClassifier:
     """Idea B: Onboard Botanical & Species AI (~800 MB RAM).
