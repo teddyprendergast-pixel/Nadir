@@ -5,7 +5,7 @@
 [![Simulation: MuJoCo/MJX](https://img.shields.io/badge/Sim-MuJoCo%20MJX-green.svg)](https://github.com/google-deepmind/mujoco)
 [![Inference: ONNX Runtime](https://img.shields.io/badge/Inference-ONNX%20Runtime%2050Hz-orange.svg)](https://onnxruntime.ai/)
 
-**Nadir** is a desktop-scale (~35 cm tall, ~1.5 kg) autonomous bipedal robot designed on an accessible student budget of approximately **£700. 
+**Nadir** is a desktop-scale (~35 cm tall, ~1.5 kg) autonomous bipedal robot designed on an accessible student budget of approximately **£700**. 
 
 Engineered specifically for **rough-terrain forest exploration and ecological biodiversity monitoring**, Nadir navigates GPS-denied forest floors (moss, roots, leaf litter, stepped obstacles) while autonomously mapping plant species and surveying wildlife audio in real time.
 
@@ -22,11 +22,11 @@ nadir/
 │
 ├── 1. README.md                ← You are here
 │
-├── 2. hardware/                ← Hardware & CAD Modeling
-│   ├── nadir.xml               # MJCF robot model (masses, joints, collision geometry)
-│   └── measured/               # Bench-tested servo parameters (single source of truth)
-│       ├── actuators.yaml      # Fitted PD gains, backlash, bus latency
-│       └── README.md           # Measurement protocol
+├── 2. hardware/                ← Hardware & CAD 3D Models
+│   ├── Arduino_UNO_Q.SLDPRT    # SolidWorks CAD model for Uno Q compute
+│   ├── arduino_uno_q_housing*  # Enclosure & mounting clamp parts
+│   ├── head.SLDPRT             # Stereo camera & sensor head mount
+│   └── servo STS3215.SLDPRT    # Feetech actuator CAD reference
 │
 ├── 3. software/                ← Software (ML, Perception, Navigation, Biodiversity)
 │   ├── training/               # PPO reinforcement learning pipeline (JAX/Flax)
@@ -35,15 +35,16 @@ nadir/
 │   ├── biodiversity/           # Edge AI: plant classification & bioacoustic surveying
 │   ├── scripts/                # Benchmarks, SLURM launcher
 │   └── tests/                  # Automated test suite
+│
 ├── 4. simulation/              ← Digital Twin Simulation (MuJoCo/MJX)
 │   ├── env_mjx.py              # Vectorized JAX environment (4,096 parallel robots)
 │   ├── rewards.py              # Shaped rewards (jerk penalty, inertia, soft impact)
 │   ├── reference_motion.py     # Kinematic gait reference trajectory
 │   └── visualize_sim.py        # Interactive 3D MuJoCo viewer
 │
-├── 5. sim_to_real/             ← Sim-to-Real Transfer
+├── 5. sim_to_real/             ← Sim-to-Real Transfer (Staged workspace)
 │
-└── 6. real/                    ← Embedded Deployment
+└── 6. real/                    ← Embedded Deployment (Staged workspace)
 ```
 
 ---
@@ -124,10 +125,10 @@ flowchart TD
 Sim-to-real transfer fails when simulations assume ideal, frictionless motors or instantaneous torque responses. Nadir enforces 5 non-negotiable engineering principles in simulation and runtime:
 
 1. **Strict Position Control:** The Feetech STS3215 closes its own position loop internally. MuJoCo simulation uses `<position>` actuators (never `<motor>`).
-2. **Onboard Action Low-Pass Filtering:** An Exponential Moving Average (EMA) filter ($\alpha = 0.7$) runs inside `real/onnx_infer.py` to eliminate 50 Hz micro-tremors and motor chatter.
+2. **Onboard Action Low-Pass Filtering:** An Exponential Moving Average (EMA) filter ($\alpha = 0.7$) eliminates 50 Hz micro-tremors and motor chatter.
 3. **Action Jerk Penalty ($2^{\text{nd}}$ Derivative):** `simulation/rewards.py` penalizes sudden changes in joint acceleration ($\|a_t - 2a_{t-1} + a_{t-2}\|^2$) forcing the policy to learn smooth S-curve movements.
 4. **Torso Inertial Stabilization:** Penalizes torso angular acceleration ($\|\dot{\omega}_{\text{base}}\|^2$) and linear jerk, eliminating body pitch flapping and providing a stable camera horizon.
-5. **Soft Ground Impact & Joint Compliance:** Soft foot-touchdown penalties prevent chassis vibration, while ankle joints use compliant gain overrides ($K_p = 12.0$) configured in `hardware/measured/actuators.yaml` to absorb ground shocks.
+5. **Soft Ground Impact & Joint Compliance:** Soft foot-touchdown penalties prevent chassis vibration, while ankle joints use compliant gain overrides ($K_p = 12.0$) to absorb ground shocks.
 
 ---
 
@@ -169,16 +170,7 @@ python simulation/visualize_sim.py --policy models/nadir_policy.onnx
 
 ### 5. Deploy Onboard (Arduino Uno Q 4GB)
 
-Run the deterministic 50 Hz control loop on the physical robot:
-```bash
-python -m real.control_loop --policy models/nadir_policy.onnx --port /dev/ttyAMA0 --imu bno085
-```
-
----
-
-## 📜 Engineering Audit Log
-
-Transparency in engineering decisions is paramount. See [docs/audit-2026-08-21.md](docs/audit-2026-08-21.md) for a technical post-mortem detailing how an initial AI-generated scaffold (which erroneously assumed a 11.4 kg planar torque-controlled robot) was detected, audited, and replaced with physical reality.
+The physical robot runs a deterministic 50 Hz control loop on the Arduino Uno Q interfacing with the onboard IMU and 1 Mbps TTL servo bus (configured via `real/`).
 
 ---
 
