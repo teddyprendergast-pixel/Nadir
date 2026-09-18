@@ -35,12 +35,15 @@ nadir/
 │   ├── biodiversity/           # Edge AI: plant classification & bioacoustic surveying
 │   ├── scripts/                # Benchmarks, SLURM launcher
 │   └── tests/                  # Automated test suite
+├── 4. simulation/              ← Digital Twin Simulation (MuJoCo/MJX)
+│   ├── env_mjx.py              # Vectorized JAX environment (4,096 parallel robots)
+│   ├── rewards.py              # Shaped rewards (jerk penalty, inertia, soft impact)
+│   ├── reference_motion.py     # Kinematic gait reference trajectory
+│   └── visualize_sim.py        # Interactive 3D MuJoCo viewer
 │
-└── 4. simulation/              ← Digital Twin Simulation (MuJoCo/MJX)
-    ├── env_mjx.py              # Vectorized JAX environment (4,096 parallel robots)
-    ├── rewards.py              # Shaped rewards (jerk penalty, inertia, soft impact)
-    ├── reference_motion.py     # Kinematic gait reference trajectory
-    └── visualize_sim.py        # Interactive 3D MuJoCo viewer
+├── 5. sim_to_real/             ← Sim-to-Real Transfer
+│
+└── 6. real/                    ← Embedded Deployment
 ```
 
 ---
