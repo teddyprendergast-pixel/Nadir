@@ -20,9 +20,8 @@ outputs/
 *.msgpack
 *.pkl
 
-# Hardware logs (raw system-ID captures live in hardware/measured/raw/, gitignored;
-# only the fitted parameters in *.yaml are committed)
-hardware/measured/raw/
+# Hardware measurements
+hardware/measured/
 
 # Cluster
 slurm-*.out
