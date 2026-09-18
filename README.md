@@ -36,24 +36,11 @@ nadir/
 │   ├── scripts/                # Benchmarks, SLURM launcher
 │   └── tests/                  # Automated test suite
 │
-├── 4. simulation/              ← Digital Twin Simulation (MuJoCo/MJX)
-│   ├── env_mjx.py              # Vectorized JAX environment (4,096 parallel robots)
-│   ├── rewards.py              # Shaped rewards (jerk penalty, inertia, soft impact)
-│   ├── reference_motion.py     # Kinematic gait reference trajectory
-│   └── visualize_sim.py        # Interactive 3D MuJoCo viewer
-│
-├── 5. sim_to_real/             ← Sim-to-Real Transfer
-│   ├── domain_rand.py          # Mass, friction, CoM, actuator gain randomization
-│   └── export_onnx.py          # JAX/Flax → PyTorch → ONNX export for ARM deployment
-│
-├── 6. real/                    ← Only Real (Embedded Deployment)
-│   ├── control_loop.py         # Deterministic 50 Hz balance loop + tilt safety watchdog
-│   ├── servo_bus.py            # 1 Mbps half-duplex TTL driver (Feetech STS3215)
-│   ├── imu.py                  # BNO085 / BNO055 orientation sensor drivers
-│   ├── onnx_infer.py           # ONNX Runtime inference with EMA low-pass filter
-│   └── vision_process.py       # Isolated perception worker (5–15 Hz, non-blocking IPC)
-│
-└── docs/                       # Technical documentation & audit reports
+└── 4. simulation/              ← Digital Twin Simulation (MuJoCo/MJX)
+    ├── env_mjx.py              # Vectorized JAX environment (4,096 parallel robots)
+    ├── rewards.py              # Shaped rewards (jerk penalty, inertia, soft impact)
+    ├── reference_motion.py     # Kinematic gait reference trajectory
+    └── visualize_sim.py        # Interactive 3D MuJoCo viewer
 ```
 
 ---
