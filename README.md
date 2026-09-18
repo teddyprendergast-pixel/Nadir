@@ -5,7 +5,7 @@
 [![Simulation: MuJoCo/MJX](https://img.shields.io/badge/Sim-MuJoCo%20MJX-green.svg)](https://github.com/google-deepmind/mujoco)
 [![Inference: ONNX Runtime](https://img.shields.io/badge/Inference-ONNX%20Runtime%2050Hz-orange.svg)](https://onnxruntime.ai/)
 
-**Nadir** is a desktop-scale (~35 cm tall, ~1.5 kg) autonomous bipedal robot designed on an accessible student budget of approximately **£700 / €700**. 
+**Nadir** is a desktop-scale (~35 cm tall, ~1.5 kg) autonomous bipedal robot designed on an accessible student budget of approximately **£700. 
 
 Engineered specifically for **rough-terrain forest exploration and ecological biodiversity monitoring**, Nadir navigates GPS-denied forest floors (moss, roots, leaf litter, stepped obstacles) while autonomously mapping plant species and surveying wildlife audio in real time.
 
