@@ -30,7 +30,7 @@ nadir/
 │
 ├── 3. software/                ← Software (ML, Perception, Navigation, Biodiversity)
 │   ├── training/               # PPO reinforcement learning pipeline (JAX/Flax)
-│   ├── vision/                 # Depth perception & visual encoding (OAK-D Lite)
+│   ├── vision/                 # Depth perception & visual encoding (Dual 8MP Stereo)
 │   ├── navigation/             # 2.5D costmap, FMM planner, micro-corridor refinement
 │   ├── biodiversity/           # Edge AI: plant classification & bioacoustic surveying
 │   ├── scripts/                # Benchmarks, SLURM launcher
@@ -76,7 +76,7 @@ Nadir strictly decouples **high-frequency dynamic balance** from **asynchronous 
 ```mermaid
 flowchart TD
     subgraph Sensors["Perception & Senses"]
-        CAM["Stereo Depth Camera<br/>(OAK-D / Active IR)"]
+        CAM["Dual 8MP Stereo Cameras<br/>(Synchronized Depth / RGB)"]
         MIC["USB Microphone Array"]
         IMU["BNO085 9-DOF IMU<br/>(Gravity + Gyro)"]
     end
@@ -123,7 +123,7 @@ flowchart TD
 | **Compute** | **Arduino Uno Q 4GB** / Linux ARM64 SBC | Quad-core ARM processor, 4 GB RAM. Runs headless Linux, ONNX Runtime C++ engine, and background Edge AI pipelines. |
 | **Actuators** | **10–12× Feetech STS3215** | Half-duplex TTL serial bus daisy-chained @ 1 Mbps. 12-bit magnetic encoders. **Strict Position Control** (internal PD loop). Torque stall: 2.94 N·m @ 7.4 V. |
 | **IMU** | **BNO085** | High-precision orientation sensor providing projected gravity vectors and 3D angular velocities at >100 Hz. |
-| **Vision** | **Luxonis OAK-D Pro / Lite** | Active IR dot projector, stereo depth, and onboard Myriad X / RVC2 VPU for offloading disparity calculation. |
+| **Vision** | **Dual 8MP Stereo Cameras (2× 8MP)** | Synchronized stereo camera pair for depth disparity estimation and high-resolution botanical survey capture. |
 | **Audio** | **USB Microphone Array** | High-sensitivity omnidirectional condenser mic for bioacoustic bird/wildlife audio classification. |
 | **Power** | **2S LiPo (7.4 V, 3500 mAh, 110C)** | Direct high-current connection to servo bus (no regulator brownouts). Dedicated **5 V / 5 A UBEC** for clean logic power. |
 | **Frame** | **Self-Manufactured PETG** | 3D-printed PETG linkages, brass heat-set threaded inserts (M3), and F623ZZ flanged bearings at all rotational joints. |

@@ -20,13 +20,13 @@ class VisionProcess:
         """Main vision loop."""
         try:
             # We delay imports so they don't impact the main control process
-            from software.vision.depth_provider import OakDLiteProvider
+            from software.vision.depth_provider import Dual8MPCameraProvider
             from software.navigation.navigator import Navigator
         except ImportError:
             print("Vision modules not found. Exiting vision process.")
             return
             
-        depth = OakDLiteProvider(fps=15)
+        depth = Dual8MPCameraProvider(fps=15)
         nav = Navigator(depth)
         if self.goal:
             nav.set_goal(*self.goal)

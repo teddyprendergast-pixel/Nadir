@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class TraversabilityConfig:
-    # Camera intrinsics (OAK-D Lite approximate)
+    # Camera intrinsics (Dual 8MP stereo camera approximate)
     fx: float = 320.0
     fy: float = 320.0
     cx: float = 32.0  # center of 64x64 image
