@@ -39,7 +39,6 @@ nadir/
 ├── 4. simulation/              ← Digital Twin Simulation (MuJoCo/MJX)
 │   ├── env_mjx.py              # Vectorized JAX environment (4,096 parallel robots)
 │   ├── rewards.py              # Shaped rewards (jerk penalty, inertia, soft impact)
-│   ├── terrains.py             # Procedural terrain generator (forest roots, stairs)
 │   ├── reference_motion.py     # Kinematic gait reference trajectory
 │   └── visualize_sim.py        # Interactive 3D MuJoCo viewer
 │
